@@ -20,7 +20,7 @@ permissions:
 jobs:
   windows:
     runs-on: windows-2025
-    timeout-minutes: 90
+    timeout-minutes: 150
     defaults:
       run:
         working-directory: messenger
@@ -29,7 +29,7 @@ jobs:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           repository: hwanys2/foreducator-frontend
-          ref: 5c7e6466d6826a20475e8edbfe5b63182f861b98
+          ref: 0af1968ecdaa9e9f0330687566f282e3412a15c6
           ssh-key: ${{ secrets.FOREDU_SOURCE_READ_KEY }}
           persist-credentials: false
       - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
@@ -40,6 +40,16 @@ jobs:
       - name: Install pinned Rust toolchain
         if: ${{ !inputs.native_source_run }}
         run: rustup toolchain install 1.99.1 --profile minimal --component rustfmt --component clippy
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        if: ${{ !inputs.native_source_run }}
+        id: rust-cache
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            messenger/target
+          key: messenger-windows-rust-1.99.1-${{ hashFiles('messenger/Cargo.lock', 'messenger/crates/**/*.rs', 'messenger/package.json') }}
+          restore-keys: messenger-windows-rust-1.99.1-
       - name: Install dependencies
         run: npm ci
       - name: Ensure Electron binary is available
@@ -63,6 +73,15 @@ jobs:
           $PSNativeCommandUseErrorActionPreference = $true
           cargo build --release --workspace --locked
           ./target/release/foredu-native-input.exe --probe
+      - name: Save native dependencies before desktop verification
+        if: ${{ !inputs.native_source_run && steps.rust-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            messenger/target
+          key: messenger-windows-rust-1.99.1-${{ hashFiles('messenger/Cargo.lock', 'messenger/crates/**/*.rs', 'messenger/package.json') }}
       - name: Verify existing native build provenance
         if: ${{ inputs.native_source_run }}
         env:
