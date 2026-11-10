@@ -29,7 +29,7 @@ jobs:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           repository: hwanys2/foreducator-frontend
-          ref: f1476423c1ae0512ad0a694e81de268b769a20d4
+          ref: 31a99c091ecda40106be09f14e99de409988a303
           ssh-key: ${{ secrets.FOREDU_SOURCE_READ_KEY }}
           persist-credentials: false
       - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
@@ -111,66 +111,127 @@ jobs:
         env:
           FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
         run: |
-          $PSNativeCommandUseErrorActionPreference = $true
+          $PSNativeCommandUseErrorActionPreference = $false
+          $failed = @()
           npm test
+          if ($LASTEXITCODE -ne 0) { $failed += "npm test" }
           node scripts/third-party-notices.mjs --check
+          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/third-party-notices.mjs --check" }
           node scripts/native-notices.mjs --check
+          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/native-notices.mjs --check" }
           node scripts/native-notices-core.mjs
+          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/native-notices-core.mjs" }
           node scripts/large-store-core.mjs
+          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/large-store-core.mjs" }
           npm run build
+          if ($LASTEXITCODE -ne 0) { $failed += "npm run build" }
           npm run test:desktop
+          if ($LASTEXITCODE -ne 0) { $failed += "npm run test:desktop" }
           node scripts/multigroup-core.mjs
+          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/multigroup-core.mjs" }
           node scripts/multigroup-desktop.mjs
+          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/multigroup-desktop.mjs" }
           node scripts/administration-desktop.mjs
+          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/administration-desktop.mjs" }
           node scripts/windows-service.mjs
+          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/windows-service.mjs" }
           node scripts/remote-core.mjs
+          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/remote-core.mjs" }
           node scripts/remote-desktop.mjs
+          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/remote-desktop.mjs" }
           npm run test:live
+          if ($LASTEXITCODE -ne 0) { $failed += "npm run test:live" }
           node ../scripts/messenger/relay-wire-contract.mjs
+          if ($LASTEXITCODE -ne 0) { $failed += "node ../scripts/messenger/relay-wire-contract.mjs" }
           node scripts/lifecycle-core.mjs
+          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/lifecycle-core.mjs" }
           node scripts/group-lifecycle.mjs
+          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/group-lifecycle.mjs" }
           node scripts/group-departure.mjs
+          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/group-departure.mjs" }
           node scripts/group-members-core.mjs
+          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/group-members-core.mjs" }
           node scripts/rekey-publication.mjs
+          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/rekey-publication.mjs" }
           node scripts/review-core.mjs
+          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/review-core.mjs" }
           node scripts/file-queue-core.mjs
+          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/file-queue-core.mjs" }
           node scripts/folder-core.mjs
+          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/folder-core.mjs" }
           node scripts/folder-desktop.mjs
+          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/folder-desktop.mjs" }
           node scripts/compose-drafts-core.mjs
+          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/compose-drafts-core.mjs" }
           node scripts/compose-drafts-desktop.mjs
+          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/compose-drafts-desktop.mjs" }
           node scripts/conversation-window-desktop.mjs
+          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/conversation-window-desktop.mjs" }
           node scripts/conversation-read-desktop.mjs
+          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/conversation-read-desktop.mjs" }
           node scripts/personal-collections-core.mjs
+          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/personal-collections-core.mjs" }
           node scripts/personal-collections-desktop.mjs
+          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/personal-collections-desktop.mjs" }
           node scripts/library-settings-desktop.mjs
+          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/library-settings-desktop.mjs" }
           node scripts/library-reference-core.mjs
+          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/library-reference-core.mjs" }
           node scripts/library-reference-desktop.mjs
+          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/library-reference-desktop.mjs" }
           node scripts/screen-lock-core.mjs
+          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/screen-lock-core.mjs" }
           node scripts/screen-lock-desktop.mjs
+          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/screen-lock-desktop.mjs" }
           node scripts/scheduled-core.mjs
+          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/scheduled-core.mjs" }
           node scripts/scheduled-desktop.mjs
+          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/scheduled-desktop.mjs" }
           node scripts/rich-text-core.mjs
+          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/rich-text-core.mjs" }
           node scripts/rich-text-desktop.mjs
+          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/rich-text-desktop.mjs" }
           node scripts/media-queue-desktop.mjs
+          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/media-queue-desktop.mjs" }
           node scripts/conversation-tools-desktop.mjs
+          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/conversation-tools-desktop.mjs" }
           node scripts/library-cleanup-core.mjs
+          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/library-cleanup-core.mjs" }
           node scripts/timetable-notices-core.mjs
+          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/timetable-notices-core.mjs" }
           node scripts/history-core.mjs
+          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/history-core.mjs" }
           node scripts/history-desktop.mjs
+          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/history-desktop.mjs" }
           node scripts/recall-core.mjs
+          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/recall-core.mjs" }
           node scripts/recall-desktop.mjs
+          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/recall-desktop.mjs" }
           node scripts/backup-core.mjs
+          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/backup-core.mjs" }
           node scripts/school-work-core.mjs
+          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/school-work-core.mjs" }
           node scripts/notes-core.mjs
+          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/notes-core.mjs" }
           node scripts/self-recovery.mjs
+          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/self-recovery.mjs" }
           node scripts/recovery-history.mjs
+          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/recovery-history.mjs" }
           node scripts/backup-desktop.mjs
+          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/backup-desktop.mjs" }
           node scripts/capture-attachment-desktop.mjs
+          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/capture-attachment-desktop.mjs" }
           node scripts/school-work-desktop.mjs
+          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/school-work-desktop.mjs" }
           node scripts/lifecycle-desktop.mjs
+          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/lifecycle-desktop.mjs" }
           node scripts/windows-input.mjs
+          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/windows-input.mjs" }
           npm run test:live-desktop
+          if ($LASTEXITCODE -ne 0) { $failed += "npm run test:live-desktop" }
           npm audit --audit-level=moderate
+          if ($LASTEXITCODE -ne 0) { $failed += "npm audit --audit-level=moderate" }
+          if ($failed.Count) { throw ("Failed checks: " + ($failed -join "; ")) }
       - name: Build separate teacher and administration installers
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
