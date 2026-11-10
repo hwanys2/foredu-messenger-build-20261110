@@ -1,0 +1,180 @@
+name: Temporary Windows installer verification
+on:
+  workflow_dispatch:
+    inputs:
+      native_source_run:
+        description: Completed Windows native run with identical Rust inputs (optional)
+        required: false
+        type: string
+      verify_external_relay:
+        description: Verify installed apps against the deployed relay with synthetic accounts
+        required: false
+        default: false
+        type: boolean
+concurrency:
+  group: messenger-windows-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+  actions: read
+jobs:
+  windows:
+    runs-on: windows-2025
+    timeout-minutes: 90
+    defaults:
+      run:
+        working-directory: messenger
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          repository: hwanys2/foreducator-frontend
+          ref: 5c7e6466d6826a20475e8edbfe5b63182f861b98
+          ssh-key: ${{ secrets.FOREDU_SOURCE_READ_KEY }}
+          persist-credentials: false
+      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+        with:
+          node-version: 26.5.0
+          cache: npm
+          cache-dependency-path: messenger/package-lock.json
+      - name: Install pinned Rust toolchain
+        if: ${{ !inputs.native_source_run }}
+        run: rustup toolchain install 1.99.1 --profile minimal --component rustfmt --component clippy
+      - name: Install dependencies
+        run: npm ci
+      - name: Ensure Electron binary is available
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          node scripts/ensure-electron.mjs
+          node scripts/ensure-builder-tools.mjs
+      - name: Verify Rust formatting
+        if: ${{ !inputs.native_source_run }}
+        run: cargo fmt --all --check
+      - name: Check native core
+        if: ${{ !inputs.native_source_run }}
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: Test native core
+        if: ${{ !inputs.native_source_run }}
+        run: cargo test --workspace --locked
+      - name: Build native executables
+        if: ${{ !inputs.native_source_run }}
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          cargo build --release --workspace --locked
+          ./target/release/foredu-native-input.exe --probe
+      - name: Verify existing native build provenance
+        if: ${{ inputs.native_source_run }}
+        env:
+          NATIVE_SOURCE_RUN: ${{ inputs.native_source_run }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/verify-native-artifact.mjs
+      - name: Retrieve verified native artifact
+        if: ${{ inputs.native_source_run }}
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: messenger-windows-prototype
+          path: messenger/imported-native
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.native_source_run }}
+      - name: Prepare existing native executables
+        if: ${{ inputs.native_source_run }}
+        run: |
+          New-Item -ItemType Directory -Force target/release | Out-Null
+          foreach ($name in @('foredu-server.exe','foredu-native.exe','foredu-native-input.exe')) {
+            $files = @(Get-ChildItem imported-native -Filter $name -File -Recurse)
+            if ($files.Length -ne 1) { throw "A unique verified native executable is required." }
+            Copy-Item -LiteralPath $files[0].FullName -Destination (Join-Path target/release $name)
+          }
+      - name: Prepare app-local Windows runtime
+        run: ./scripts/windows-runtime.ps1
+      - name: Verify client and Electron windows
+        env:
+          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          npm test
+          node scripts/third-party-notices.mjs --check
+          node scripts/native-notices.mjs --check
+          node scripts/native-notices-core.mjs
+          node scripts/large-store-core.mjs
+          npm run build
+          npm run test:desktop
+          node scripts/multigroup-core.mjs
+          node scripts/multigroup-desktop.mjs
+          node scripts/administration-desktop.mjs
+          node scripts/windows-service.mjs
+          node scripts/remote-core.mjs
+          node scripts/remote-desktop.mjs
+          npm run test:live
+          node ../scripts/messenger/relay-wire-contract.mjs
+          node scripts/lifecycle-core.mjs
+          node scripts/group-lifecycle.mjs
+          node scripts/group-departure.mjs
+          node scripts/group-members-core.mjs
+          node scripts/rekey-publication.mjs
+          node scripts/review-core.mjs
+          node scripts/file-queue-core.mjs
+          node scripts/folder-core.mjs
+          node scripts/folder-desktop.mjs
+          node scripts/compose-drafts-core.mjs
+          node scripts/compose-drafts-desktop.mjs
+          node scripts/conversation-window-desktop.mjs
+          node scripts/conversation-read-desktop.mjs
+          node scripts/personal-collections-core.mjs
+          node scripts/personal-collections-desktop.mjs
+          node scripts/library-settings-desktop.mjs
+          node scripts/library-reference-core.mjs
+          node scripts/library-reference-desktop.mjs
+          node scripts/screen-lock-core.mjs
+          node scripts/screen-lock-desktop.mjs
+          node scripts/scheduled-core.mjs
+          node scripts/scheduled-desktop.mjs
+          node scripts/rich-text-core.mjs
+          node scripts/rich-text-desktop.mjs
+          node scripts/media-queue-desktop.mjs
+          node scripts/conversation-tools-desktop.mjs
+          node scripts/library-cleanup-core.mjs
+          node scripts/timetable-notices-core.mjs
+          node scripts/history-core.mjs
+          node scripts/history-desktop.mjs
+          node scripts/recall-core.mjs
+          node scripts/recall-desktop.mjs
+          node scripts/backup-core.mjs
+          node scripts/school-work-core.mjs
+          node scripts/notes-core.mjs
+          node scripts/self-recovery.mjs
+          node scripts/recovery-history.mjs
+          node scripts/backup-desktop.mjs
+          node scripts/capture-attachment-desktop.mjs
+          node scripts/school-work-desktop.mjs
+          node scripts/lifecycle-desktop.mjs
+          node scripts/windows-input.mjs
+          npm run test:live-desktop
+          npm audit --audit-level=moderate
+      - name: Build separate teacher and administration installers
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          npm run package:win -- --publish never
+          npm run package:win:admin -- --publish never
+      - name: Verify installed application
+        env:
+          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
+          FOREDU_MESSENGER_TEST_AUTH: ${{ secrets.FOREDU_MESSENGER_TEST_AUTH }}
+          FOREDU_TEST_PRODUCTION_RELAY: ${{ (github.event_name == 'push' || inputs.verify_external_relay) && '1' || '' }}
+        run: node scripts/verify-install.mjs
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: messenger-windows-prototype
+          path: |
+            messenger/release/*.exe
+            messenger/target/release/foredu-server.exe
+            messenger/target/release/foredu-native.exe
+            messenger/target/release/foredu-native-input.exe
+            messenger/target/release/*.dll
+            messenger/test-results/
+          retention-days: 2
