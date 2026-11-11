@@ -1,4 +1,4 @@
-name: Temporary Windows installer verification
+name: Windows messenger repair verification
 on:
   workflow_dispatch:
     inputs:
@@ -29,7 +29,7 @@ jobs:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           repository: hwanys2/foreducator-frontend
-          ref: c7ae6a5d1b5f2f72b17ebd3202e5a63919bbb0a6
+          ref: 35a7f748908dcc19926931bb90925fbbdc2f8dd7
           ssh-key: ${{ secrets.FOREDU_SOURCE_READ_KEY }}
           persist-credentials: false
       - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
@@ -135,6 +135,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) { $failed += "node scripts/administration-desktop.mjs" }
           node scripts/windows-service.mjs
           if ($LASTEXITCODE -ne 0) { $failed += "node scripts/windows-service.mjs" }
+          node scripts/windows-legacy-upgrade.mjs
+          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/windows-legacy-upgrade.mjs" }
+          node scripts/group-read-core.mjs
+          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/group-read-core.mjs" }
           node scripts/remote-core.mjs
           if ($LASTEXITCODE -ne 0) { $failed += "node scripts/remote-core.mjs" }
           node scripts/remote-desktop.mjs
