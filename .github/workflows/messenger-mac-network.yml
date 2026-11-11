@@ -1,0 +1,79 @@
+name: Mac messenger outside network verification
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: messenger-mac-network
+  cancel-in-progress: false
+jobs:
+  mac-network:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
+        with:
+          repository: hwanys2/foreducator-frontend
+          ref: ffa7d22b4de890e55cbc79b22264b532fc546e11
+          ssh-key: ${{ secrets.FOREDU_SOURCE_READ_KEY }}
+          persist-credentials: false
+      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903
+        with:
+          node-version: 26.5.0
+          cache: npm
+          cache-dependency-path: messenger/package-lock.json
+      - name: Install pinned test dependencies
+        working-directory: messenger
+        run: npm ci --no-audit --no-fund
+      - name: Retrieve private exact-archive inputs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download mac-018-network-inputs-20261111 --repo hwanys2/foredu-messenger-build-20261110 --dir "$RUNNER_TEMP/foredu-inputs"
+      - name: Verify inputs and extract actual Mac application
+        working-directory: messenger
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs/promises';
+          import { createReadStream } from 'node:fs';
+          import crypto from 'node:crypto';
+          import assert from 'node:assert/strict';
+          import path from 'node:path';
+          import { sourceEvidence } from './scripts/release-evidence.mjs';
+          assert.equal(process.platform,'darwin');
+          assert.equal(process.arch,'arm64');
+          assert.deepEqual(sourceEvidence(),{sourceCommit:'ffa7d22b4de890e55cbc79b22264b532fc546e11',sourceDirty:false});
+          const expected={
+            'ForeduMessenger-Teacher-SchoolTest-0.1.8-mac-arm64.zip':'cb50c10d899795677aad695b520c12ca75d397a08a47929b6ebef8448527952b',
+            'mac-native-arm64.tar.gz':'994eee25500b944937d3cc812eccb74c84260f8a0cbbd0f709cc910462d77821'
+          };
+          for(const [name,hash] of Object.entries(expected)){
+            const h=crypto.createHash('sha256');
+            for await(const chunk of createReadStream(path.join(process.env.RUNNER_TEMP,'foredu-inputs',name)))h.update(chunk);
+            assert.equal(h.digest('hex'),hash);
+          }
+          await fs.mkdir('test-results',{recursive:true});
+          await fs.writeFile('test-results/mac-network-inputs.json',JSON.stringify({ok:true,...sourceEvidence(),platform:process.platform,architecture:process.arch,inputs:expected,githubRunId:process.env.GITHUB_RUN_ID},null,2));
+          JS
+          mkdir -p target/release "$RUNNER_TEMP/foredu-installed"
+          tar -xzf "$RUNNER_TEMP/foredu-inputs/mac-native-arm64.tar.gz" -C target/release
+          ditto -x -k "$RUNNER_TEMP/foredu-inputs/ForeduMessenger-Teacher-SchoolTest-0.1.8-mac-arm64.zip" "$RUNNER_TEMP/foredu-installed"
+          codesign --verify --deep --strict "$RUNNER_TEMP/foredu-installed/ForeduSchoolMessengerTrial.app"
+          test "$(lipo -archs "$RUNNER_TEMP/foredu-installed/ForeduSchoolMessengerTrial.app/Contents/MacOS/ForeduSchoolMessengerTrial")" = arm64
+          echo "ELECTRON_EXECUTABLE=$RUNNER_TEMP/foredu-installed/ForeduSchoolMessengerTrial.app/Contents/MacOS/ForeduSchoolMessengerTrial" >> "$GITHUB_ENV"
+          echo "FOREDU_NATIVE_BIN_DIR=$GITHUB_WORKSPACE/messenger/target/release" >> "$GITHUB_ENV"
+      - name: Verify real Foreducator login and public production relay
+        working-directory: messenger
+        env:
+          FOREDU_MESSENGER_TEST_AUTH: ${{ secrets.FOREDU_MESSENGER_TEST_AUTH }}
+          FOREDU_INSTALLER_SHA256: cb50c10d899795677aad695b520c12ca75d397a08a47929b6ebef8448527952b
+          FOREDU_LICENSE_AUTO: '0'
+        run: node scripts/external-production.mjs
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: mac-exact-archive-network-verification
+          path: |
+            messenger/test-results/mac-network-inputs.json
+            messenger/test-results/external-installed.json
+          retention-days: 2
