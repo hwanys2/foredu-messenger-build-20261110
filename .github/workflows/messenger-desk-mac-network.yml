@@ -2,7 +2,7 @@ name: Desktop workspace exact Mac archive verification
 on:
   workflow_dispatch:
 permissions:
-  contents: read
+  contents: write
 concurrency:
   group: desktop-workspace-mac
   cancel-in-progress: false
