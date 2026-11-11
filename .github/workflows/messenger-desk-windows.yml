@@ -29,7 +29,7 @@ jobs:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
         with:
           repository: hwanys2/foreducator-frontend
-          ref: d48a77fde4c75059594c6ba1b51b3c96b39a5955
+          ref: 888da3af095de6eeb41377db32dd3de6f294a6ff
           ssh-key: ${{ secrets.FOREDU_DESK020_SOURCE_READ_KEY }}
           persist-credentials: false
       - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
@@ -191,7 +191,10 @@ jobs:
           FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
           FOREDU_MESSENGER_TEST_AUTH: ${{ secrets.FOREDU_DESK020_AUTH_WINDOWS }}
           FOREDU_TEST_PRODUCTION_RELAY: ${{ (github.event_name == 'push' || inputs.verify_external_relay) && '1' || '' }}
-        run: node scripts/verify-install.mjs
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          node node_modules/playwright/cli.js install chromium
+          node scripts/verify-install.mjs
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
