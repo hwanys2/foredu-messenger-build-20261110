@@ -1,30 +1,23 @@
-name: Desktop workspace Windows exact-source verification
+name: Desktop workspace Windows exact frozen installer verification
 on:
   workflow_dispatch:
     inputs:
-      native_source_run:
-        description: Completed Windows native run with identical Rust inputs (optional)
-        required: false
-        type: string
       verify_external_relay:
-        description: Verify installed apps against the deployed relay with synthetic accounts
-        required: false
-        default: false
         type: boolean
-concurrency:
-  group: messenger-windows-${{ github.ref }}
-  cancel-in-progress: true
+        default: true
 permissions:
   contents: read
   actions: read
+concurrency:
+  group: desktop-workspace-windows-frozen
+  cancel-in-progress: false
 jobs:
   windows:
-    runs-on: windows-2025
-    timeout-minutes: 90
+    runs-on: windows-2022
+    timeout-minutes: 55
     defaults:
       run:
         working-directory: messenger
-        shell: pwsh
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
         with:
@@ -32,170 +25,40 @@ jobs:
           ref: a902679ad0e013db370669b18f0c3c03e7b1b26e
           ssh-key: ${{ secrets.FOREDU_DESK020_SOURCE_READ_KEY }}
           persist-credentials: false
-      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903
         with:
           node-version: 26.5.0
-          cache: npm
-          cache-dependency-path: messenger/package-lock.json
-      - name: Install pinned Rust toolchain
-        if: ${{ !inputs.native_source_run }}
-        run: rustup toolchain install 1.99.1 --profile minimal --component rustfmt --component clippy
-      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
-        if: ${{ !inputs.native_source_run }}
-        id: rust-cache
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            messenger/target
-          key: messenger-windows-rust-1.99.1-${{ hashFiles('messenger/Cargo.lock') }}
-          restore-keys: messenger-windows-rust-1.99.1-
-      - name: Install dependencies
-        run: npm ci
-      - name: Ensure Electron binary is available
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
+      - name: Inspect unauthenticated production ingress
+        shell: pwsh
         run: |
-          node scripts/ensure-electron.mjs
-          node scripts/ensure-builder-tools.mjs
-      - name: Verify Rust formatting
-        if: ${{ !inputs.native_source_run }}
-        run: cargo fmt --all --check
-      - name: Check native core
-        if: ${{ !inputs.native_source_run }}
-        run: cargo clippy --workspace --all-targets --locked -- -D warnings
-      - name: Test native core
-        if: ${{ !inputs.native_source_run }}
-        run: cargo test --workspace --locked
-      - name: Build native executables
-        if: ${{ !inputs.native_source_run }}
+          @'
+          const r=await fetch('https://www.foreducator.com/api/messenger/relay',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({actor:'probe'})});const text=await r.text();console.log(JSON.stringify({status:r.status,contentType:r.headers.get('content-type'),edge:r.headers.get('x-vercel-id'),jsonResponse:/^\s*[{[]/.test(text),securityCheckpoint:/security checkpoint|verifying your browser|cf-mitigated/i.test(text)}));if(!/^\s*[{[]/.test(text))throw Error('This runner does not receive the production API JSON response.');
+          '@ | node --input-type=module
+      - name: Install pinned test dependencies
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
-          cargo build --release --workspace --locked
-          ./target/release/foredu-native-input.exe --probe
-      - name: Save native dependencies before desktop verification
-        if: ${{ !inputs.native_source_run && steps.rust-cache.outputs.cache-hit != 'true' }}
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            messenger/target
-          key: messenger-windows-rust-1.99.1-${{ hashFiles('messenger/Cargo.lock') }}
-      - name: Verify existing native build provenance
-        if: ${{ inputs.native_source_run }}
+          npm ci --no-audit --no-fund
+          node node_modules/playwright/cli.js install chromium
+      - name: Retrieve the exact previously built files
         env:
-          NATIVE_SOURCE_RUN: ${{ inputs.native_source_run }}
-          GITHUB_TOKEN: ${{ github.token }}
-        run: node scripts/verify-native-artifact.mjs
-      - name: Retrieve verified native artifact
-        if: ${{ inputs.native_source_run }}
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
-        with:
-          name: messenger-windows-prototype
-          path: messenger/imported-native
-          github-token: ${{ github.token }}
-          run-id: ${{ inputs.native_source_run }}
-      - name: Prepare existing native executables
-        if: ${{ inputs.native_source_run }}
-        run: |
-          New-Item -ItemType Directory -Force target/release | Out-Null
-          foreach ($name in @('foredu-server.exe','foredu-native.exe','foredu-native-input.exe')) {
-            $files = @(Get-ChildItem imported-native -Filter $name -File -Recurse)
-            if ($files.Length -ne 1) { throw "A unique verified native executable is required." }
-            Copy-Item -LiteralPath $files[0].FullName -Destination (Join-Path target/release $name)
-          }
-      - name: Prepare app-local Windows runtime
-        run: ./scripts/windows-runtime.ps1
-      - name: Verify client and Electron windows
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download 43040543491 --repo hwanys2/foredu-messenger-build-20261110 --name messenger-windows-prototype --dir "$env:RUNNER_TEMP/foredu-frozen"
+      - name: Verify hashes and unchanged source before rechecking frozen installers
         env:
-          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
+          EXPECTED_{"release/ForeduMessenger-Administration-SchoolTest-0.2.0-x64.exe":"1d53a9c3eef0680a74627000a6585a57916b576f518cc3f9ee203b8494ce2be3","release/ForeduMessenger-SchoolTest-0.2.0-x64.exe":"57bad4a40110621aeec5519fd8c36e8771bc4da60abf5b62e5b163eacb7bbe1f","release/update-fixtures/ForeduMessenger-Administration-SchoolTest-0.2.1-x64.exe":"e7c558efc6eb8220b19e3d0cc8f6981f7883d3eed9cc1676dd38267388b32c59","release/update-fixtures/ForeduMessenger-SchoolTest-0.2.1-x64.exe":"2093706434a44409da4679a41a77d24b5046ad7c18b31b2be677c8e2a4f46aa1","target/release/foredu-server.exe":"3aeb3a5ff70f4151653f8feb4e98ff23c8a3ee0fc07de415eca530fe1c3ebef9","target/release/vcruntime140.dll":"d1f4225df2cd877dbf130d5668a021dce3f94118455ff5ec952061c30afc9ce7","target/release/vccorlib140.dll":"09f93d5ff96ae09767f3e1af3cdd43a5a58f2598654fc63089429bb6f9f4737f","target/release/concrt140.dll":"54716f0738af891f283d213b5c8d11b25896bb8ee3097d301eae718560cf974e","target/release/msvcp140_atomic_wait.dll":"3d0cbfaa1bf3eecf5a3f4491d2960ee803cb994f30292c6adc4a07c498f60e2b","target/release/msvcp140_1.dll":"206c931bf90fdad8816de3b5e2ef80b2bcaa9406c89ecc05fe6fddffe251e982","target/release/foredu-native.exe":"e8cd2f6a36a785104e9e646319fe354c2b4f57d0009bfebaae0bbc205e9aa4da","target/release/msvcp140_2.dll":"d50d7883f20d1dc6191768d3746f52dd9cac89c346ffaed5be1f110c2f34a838","target/release/msvcp140_codecvt_ids.dll":"8a65c7596ef2e6938731f5a1058e7e40145b6d97967cc649231a076b9a608d78","target/release/vcruntime140_1.dll":"a7146c08f89fe5b04541ab507cdb59ff7b44534d4ba3c668a426c6450a03434e","target/release/vcruntime140_threads.dll":"40f39e8cee5f5a531b4010e18b807e8fe265b908dc58f959ecb7ebc6ea6cb11a","target/release/foredu-native-input.exe":"0ff07fbbb40ea4754e2fdbc335b9fb0d0ba127b90c3934991334a23c99923a66","target/release/msvcp140.dll":"7c26614e1d733892c2deac7e245ce115504b1d80592dd0a01b08e3e5a55f89ca","test-results/update-fixtures.json":"a0604c3ea5f27ff6024e12f643bcee960f18ddbe9bddf820df1d25eede80fe65"}: '{"release/ForeduMessenger-Administration-SchoolTest-0.2.0-x64.exe":"1d53a9c3eef0680a74627000a6585a57916b576f518cc3f9ee203b8494ce2be3","release/ForeduMessenger-SchoolTest-0.2.0-x64.exe":"57bad4a40110621aeec5519fd8c36e8771bc4da60abf5b62e5b163eacb7bbe1f","release/update-fixtures/ForeduMessenger-Administration-SchoolTest-0.2.1-x64.exe":"e7c558efc6eb8220b19e3d0cc8f6981f7883d3eed9cc1676dd38267388b32c59","release/update-fixtures/ForeduMessenger-SchoolTest-0.2.1-x64.exe":"2093706434a44409da4679a41a77d24b5046ad7c18b31b2be677c8e2a4f46aa1","target/release/foredu-server.exe":"3aeb3a5ff70f4151653f8feb4e98ff23c8a3ee0fc07de415eca530fe1c3ebef9","target/release/vcruntime140.dll":"d1f4225df2cd877dbf130d5668a021dce3f94118455ff5ec952061c30afc9ce7","target/release/vccorlib140.dll":"09f93d5ff96ae09767f3e1af3cdd43a5a58f2598654fc63089429bb6f9f4737f","target/release/concrt140.dll":"54716f0738af891f283d213b5c8d11b25896bb8ee3097d301eae718560cf974e","target/release/msvcp140_atomic_wait.dll":"3d0cbfaa1bf3eecf5a3f4491d2960ee803cb994f30292c6adc4a07c498f60e2b","target/release/msvcp140_1.dll":"206c931bf90fdad8816de3b5e2ef80b2bcaa9406c89ecc05fe6fddffe251e982","target/release/foredu-native.exe":"e8cd2f6a36a785104e9e646319fe354c2b4f57d0009bfebaae0bbc205e9aa4da","target/release/msvcp140_2.dll":"d50d7883f20d1dc6191768d3746f52dd9cac89c346ffaed5be1f110c2f34a838","target/release/msvcp140_codecvt_ids.dll":"8a65c7596ef2e6938731f5a1058e7e40145b6d97967cc649231a076b9a608d78","target/release/vcruntime140_1.dll":"a7146c08f89fe5b04541ab507cdb59ff7b44534d4ba3c668a426c6450a03434e","target/release/vcruntime140_threads.dll":"40f39e8cee5f5a531b4010e18b807e8fe265b908dc58f959ecb7ebc6ea6cb11a","target/release/foredu-native-input.exe":"0ff07fbbb40ea4754e2fdbc335b9fb0d0ba127b90c3934991334a23c99923a66","target/release/msvcp140.dll":"7c26614e1d733892c2deac7e245ce115504b1d80592dd0a01b08e3e5a55f89ca","test-results/update-fixtures.json":"a0604c3ea5f27ff6024e12f643bcee960f18ddbe9bddf820df1d25eede80fe65"}'
         run: |
-          $PSNativeCommandUseErrorActionPreference = $true
-          npm test
-          node scripts/third-party-notices.mjs --check
-          node scripts/native-notices.mjs --check
-          node scripts/native-notices-core.mjs
-          node scripts/desk-core.mjs
-          node scripts/school-bells-core.mjs
-          node scripts/large-store-core.mjs
-          npm run build
-          npm run test:desktop
-          node scripts/multigroup-core.mjs
-          node scripts/multigroup-desktop.mjs
-          node scripts/administration-desktop.mjs
-          node scripts/windows-service.mjs
-          node scripts/windows-legacy-upgrade.mjs
-          node scripts/windows-update-launcher.mjs
-          node scripts/group-read-core.mjs
-          node scripts/remote-core.mjs
-          node scripts/remote-desktop.mjs
-          npm run test:live
-          node ../scripts/messenger/relay-wire-contract.mjs
-          node scripts/lifecycle-core.mjs
-          node scripts/group-lifecycle.mjs
-          node scripts/group-departure.mjs
-          node scripts/group-members-core.mjs
-          node scripts/rekey-publication.mjs
-          node scripts/review-core.mjs
-          node scripts/file-queue-core.mjs
-          node scripts/folder-core.mjs
-          node scripts/folder-desktop.mjs
-          node scripts/compose-drafts-core.mjs
-          node scripts/compose-drafts-desktop.mjs
-          node scripts/conversation-window-desktop.mjs
-          node scripts/conversation-list-desktop.mjs
-          node scripts/conversation-read-desktop.mjs
-          node scripts/personal-collections-core.mjs
-          node scripts/personal-collections-desktop.mjs
-          node scripts/library-settings-desktop.mjs
-          node scripts/library-reference-core.mjs
-          node scripts/library-reference-desktop.mjs
-          node scripts/screen-lock-core.mjs
-          node scripts/screen-lock-desktop.mjs
-          node scripts/scheduled-core.mjs
-          node scripts/scheduled-desktop.mjs
-          node scripts/rich-text-core.mjs
-          node scripts/rich-text-desktop.mjs
-          node scripts/media-queue-desktop.mjs
-          node scripts/conversation-tools-desktop.mjs
-          node scripts/library-cleanup-core.mjs
-          node scripts/timetable-notices-core.mjs
-          node scripts/history-core.mjs
-          node scripts/history-desktop.mjs
-          node scripts/recall-core.mjs
-          node scripts/recall-desktop.mjs
-          node scripts/backup-core.mjs
-          node scripts/school-work-core.mjs
-          node scripts/notes-core.mjs
-          node scripts/self-recovery.mjs
-          node scripts/recovery-history.mjs
-          node scripts/backup-desktop.mjs
-          node scripts/capture-attachment-desktop.mjs
-          node scripts/school-work-desktop.mjs
-          node scripts/lifecycle-desktop.mjs
-          node scripts/windows-input.mjs
-          npm run test:live-desktop
-          npm audit --audit-level=moderate
-      - name: Build separate teacher and administration installers
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: "false"
-          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
-        run: |
-          $PSNativeCommandUseErrorActionPreference = $true
-          npm run package:win -- --publish never
-          npm run package:win:admin -- --publish never
-          node scripts/build-update-fixtures.mjs
-      - name: Verify installed application
+          @'
+          import fs from 'node:fs/promises';import{createReadStream}from'node:fs';import path from 'node:path';import crypto from 'node:crypto';import assert from 'node:assert/strict';import{sourceEvidence}from'./scripts/release-evidence.mjs';assert.deepEqual(sourceEvidence(),{sourceCommit:'a902679ad0e013db370669b18f0c3c03e7b1b26e',sourceDirty:false});const base=path.join(process.env.RUNNER_TEMP,'foredu-frozen'),expected=JSON.parse(process.env.EXPECTED_{"release/ForeduMessenger-Administration-SchoolTest-0.2.0-x64.exe":"1d53a9c3eef0680a74627000a6585a57916b576f518cc3f9ee203b8494ce2be3","release/ForeduMessenger-SchoolTest-0.2.0-x64.exe":"57bad4a40110621aeec5519fd8c36e8771bc4da60abf5b62e5b163eacb7bbe1f","release/update-fixtures/ForeduMessenger-Administration-SchoolTest-0.2.1-x64.exe":"e7c558efc6eb8220b19e3d0cc8f6981f7883d3eed9cc1676dd38267388b32c59","release/update-fixtures/ForeduMessenger-SchoolTest-0.2.1-x64.exe":"2093706434a44409da4679a41a77d24b5046ad7c18b31b2be677c8e2a4f46aa1","target/release/foredu-server.exe":"3aeb3a5ff70f4151653f8feb4e98ff23c8a3ee0fc07de415eca530fe1c3ebef9","target/release/vcruntime140.dll":"d1f4225df2cd877dbf130d5668a021dce3f94118455ff5ec952061c30afc9ce7","target/release/vccorlib140.dll":"09f93d5ff96ae09767f3e1af3cdd43a5a58f2598654fc63089429bb6f9f4737f","target/release/concrt140.dll":"54716f0738af891f283d213b5c8d11b25896bb8ee3097d301eae718560cf974e","target/release/msvcp140_atomic_wait.dll":"3d0cbfaa1bf3eecf5a3f4491d2960ee803cb994f30292c6adc4a07c498f60e2b","target/release/msvcp140_1.dll":"206c931bf90fdad8816de3b5e2ef80b2bcaa9406c89ecc05fe6fddffe251e982","target/release/foredu-native.exe":"e8cd2f6a36a785104e9e646319fe354c2b4f57d0009bfebaae0bbc205e9aa4da","target/release/msvcp140_2.dll":"d50d7883f20d1dc6191768d3746f52dd9cac89c346ffaed5be1f110c2f34a838","target/release/msvcp140_codecvt_ids.dll":"8a65c7596ef2e6938731f5a1058e7e40145b6d97967cc649231a076b9a608d78","target/release/vcruntime140_1.dll":"a7146c08f89fe5b04541ab507cdb59ff7b44534d4ba3c668a426c6450a03434e","target/release/vcruntime140_threads.dll":"40f39e8cee5f5a531b4010e18b807e8fe265b908dc58f959ecb7ebc6ea6cb11a","target/release/foredu-native-input.exe":"0ff07fbbb40ea4754e2fdbc335b9fb0d0ba127b90c3934991334a23c99923a66","target/release/msvcp140.dll":"7c26614e1d733892c2deac7e245ce115504b1d80592dd0a01b08e3e5a55f89ca","test-results/update-fixtures.json":"a0604c3ea5f27ff6024e12f643bcee960f18ddbe9bddf820df1d25eede80fe65"});for(const[file,hash]of Object.entries(expected)){const h=crypto.createHash('sha256');for await(const chunk of createReadStream(path.join(base,file)))h.update(chunk);assert.equal(h.digest('hex'),hash,file);}for(const folder of ['release','target/release','test-results'])await fs.cp(path.join(base,folder),folder,{recursive:true});await fs.rm('test-results/installed-verification.json',{force:true});for(const name of ['native-notices-core','desk-core','school-bells-core','live-core','windows-input']){const r=JSON.parse(await fs.readFile('test-results/'+name+'.json','utf8'));assert.equal(r.sourceCommit,'a902679ad0e013db370669b18f0c3c03e7b1b26e',name);assert.equal(r.sourceDirty,false,name);assert.equal(r.platform,'win32',name);}await fs.writeFile('test-results/frozen-installer-inputs.json',JSON.stringify({ok:true,...sourceEvidence(),platform:process.platform,sourceBuildRun:'https://github.com/hwanys2/foredu-messenger-build-20261110/actions/runs/43040543491',currentRunId:process.env.GITHUB_RUN_ID,files:expected,buildAndCoreChecks:'previous Windows 2025 run; unchanged exact bytes',installedVerification:'fresh Windows 2022 run follows'},null,2));
+          '@ | node --input-type=module
+      - name: Verify installed application and actual production connection
         env:
           FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
           FOREDU_MESSENGER_TEST_AUTH: ${{ secrets.FOREDU_DESK020_AUTH_WINDOWS }}
-          FOREDU_TEST_PRODUCTION_RELAY: ${{ (github.event_name == 'push' || inputs.verify_external_relay) && '1' || '' }}
+          FOREDU_TEST_PRODUCTION_RELAY: '1'
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
-          node node_modules/playwright/cli.js install chromium
           node scripts/verify-install.mjs
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
           name: messenger-windows-prototype
