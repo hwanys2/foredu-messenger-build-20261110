@@ -14,7 +14,7 @@ jobs:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
         with:
           repository: hwanys2/foreducator-frontend
-          ref: 0144f32709c79cfdb5e65c7815149551fd59e721
+          ref: a902679ad0e013db370669b18f0c3c03e7b1b26e
           ssh-key: ${{ secrets.FOREDU_DESK020_SOURCE_READ_KEY }}
           persist-credentials: false
       - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903
@@ -30,7 +30,7 @@ jobs:
       - name: Retrieve private exact-archive inputs
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release download desk020-inputs-0144f327 --repo hwanys2/foredu-messenger-build-20261110 --dir "$RUNNER_TEMP/foredu-inputs"
+        run: gh release download desk020-inputs-a902679a --repo hwanys2/foredu-messenger-build-20261110 --dir "$RUNNER_TEMP/foredu-inputs"
       - name: Verify exact inputs and extract application
         working-directory: messenger
         env:
@@ -38,7 +38,7 @@ jobs:
         run: |
           node --input-type=module <<'JS'
           import fs from 'node:fs/promises';import {createReadStream} from 'node:fs';import crypto from 'node:crypto';import assert from 'node:assert/strict';import path from 'node:path';import {sourceEvidence} from './scripts/release-evidence.mjs';
-          assert.equal(process.platform,'darwin');assert.equal(process.arch,'arm64');assert.deepEqual(sourceEvidence(),{sourceCommit:'0144f32709c79cfdb5e65c7815149551fd59e721',sourceDirty:false});
+          assert.equal(process.platform,'darwin');assert.equal(process.arch,'arm64');assert.deepEqual(sourceEvidence(),{sourceCommit:'a902679ad0e013db370669b18f0c3c03e7b1b26e',sourceDirty:false});
           const inputs=JSON.parse(process.env.EXPECTED_INPUTS);for(const [name,hash]of Object.entries(inputs)){const h=crypto.createHash('sha256');for await(const b of createReadStream(path.join(process.env.RUNNER_TEMP,'foredu-inputs',name)))h.update(b);assert.equal(h.digest('hex'),hash);}
           await fs.mkdir('test-results',{recursive:true});await fs.writeFile('test-results/mac-network-inputs.json',JSON.stringify({ok:true,...sourceEvidence(),platform:process.platform,architecture:process.arch,inputs,githubRunId:process.env.GITHUB_RUN_ID},null,2));
           JS
