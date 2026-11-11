@@ -1,266 +1,59 @@
-name: Windows messenger repair verification
-on:
-  workflow_dispatch:
-    inputs:
-      native_source_run:
-        description: Completed Windows native run with identical Rust inputs (optional)
-        required: false
-        type: string
-      verify_external_relay:
-        description: Verify installed apps against the deployed relay with synthetic accounts
-        required: false
-        default: false
-        type: boolean
-concurrency:
-  group: messenger-windows-${{ github.ref }}
-  cancel-in-progress: true
+name: Diagnose exact old Windows app update
+on: workflow_dispatch
 permissions:
   contents: read
   actions: read
 jobs:
-  windows:
+  diagnose:
     runs-on: windows-2025
-    timeout-minutes: 150
+    timeout-minutes: 12
     defaults:
       run:
         working-directory: messenger
         shell: pwsh
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
         with:
           repository: hwanys2/foreducator-frontend
           ref: 30ff4a726971b37d29aabe7d55d7b2a05df4eb0d
           ssh-key: ${{ secrets.FOREDU_SOURCE_READ_KEY }}
           persist-credentials: false
-      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903
         with:
           node-version: 26.5.0
           cache: npm
           cache-dependency-path: messenger/package-lock.json
-      - name: Install pinned Rust toolchain
-        if: ${{ !inputs.native_source_run }}
-        run: rustup toolchain install 1.99.1 --profile minimal --component rustfmt --component clippy
-      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
-        if: ${{ !inputs.native_source_run }}
-        id: rust-cache
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            messenger/target
-          key: messenger-windows-rust-1.99.1-${{ hashFiles('messenger/Cargo.lock', 'messenger/crates/**/*.rs', 'messenger/package.json') }}
-          restore-keys: messenger-windows-rust-1.99.1-
-      - name: Install dependencies
-        run: npm ci
-      - name: Ensure Electron binary is available
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          node scripts/ensure-electron.mjs
-          node scripts/ensure-builder-tools.mjs
-      - name: Verify Rust formatting
-        if: ${{ !inputs.native_source_run }}
-        run: cargo fmt --all --check
-      - name: Check native core
-        if: ${{ !inputs.native_source_run }}
-        run: cargo clippy --workspace --all-targets --locked -- -D warnings
-      - name: Test native core
-        if: ${{ !inputs.native_source_run }}
-        run: cargo test --workspace --locked
-      - name: Build native executables
-        if: ${{ !inputs.native_source_run }}
-        run: |
-          $PSNativeCommandUseErrorActionPreference = $true
-          cargo build --release --workspace --locked
-          ./target/release/foredu-native-input.exe --probe
-      - name: Save native dependencies before desktop verification
-        if: ${{ !inputs.native_source_run && steps.rust-cache.outputs.cache-hit != 'true' }}
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            messenger/target
-          key: messenger-windows-rust-1.99.1-${{ hashFiles('messenger/Cargo.lock', 'messenger/crates/**/*.rs', 'messenger/package.json') }}
-      - name: Verify existing native build provenance
-        if: ${{ inputs.native_source_run }}
-        env:
-          NATIVE_SOURCE_RUN: ${{ inputs.native_source_run }}
-          GITHUB_TOKEN: ${{ github.token }}
-        run: node scripts/verify-native-artifact.mjs
-      - name: Retrieve verified native artifact
-        if: ${{ inputs.native_source_run }}
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+      - run: npm ci
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
         with:
           name: messenger-windows-prototype
-          path: messenger/imported-native
+          path: ${{ runner.temp }}/candidate
           github-token: ${{ github.token }}
-          run-id: ${{ inputs.native_source_run }}
-      - name: Prepare existing native executables
-        if: ${{ inputs.native_source_run }}
-        run: |
-          New-Item -ItemType Directory -Force target/release | Out-Null
-          foreach ($name in @('foredu-server.exe','foredu-native.exe','foredu-native-input.exe')) {
-            $files = @(Get-ChildItem imported-native -Filter $name -File -Recurse)
-            if ($files.Length -ne 1) { throw "A unique verified native executable is required." }
-            Copy-Item -LiteralPath $files[0].FullName -Destination (Join-Path target/release $name)
-          }
-      - name: Prepare app-local Windows runtime
-        run: ./scripts/windows-runtime.ps1
-      - name: Verify client and Electron windows
+          run-id: 42949719166
+      - name: Diagnose unchanged real old-app update
         env:
-          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
+          FOREDU_NATIVE_BIN_DIR: ${{ runner.temp }}/candidate/target/release
+          FOREDU_LICENSE_AUTO: "0"
+        shell: bash
         run: |
-          $PSNativeCommandUseErrorActionPreference = $false
-          $failed = @()
-          npm test
-          if ($LASTEXITCODE -ne 0) { $failed += "npm test" }
-          node scripts/third-party-notices.mjs --check
-          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/third-party-notices.mjs --check" }
-          node scripts/native-notices.mjs --check
-          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/native-notices.mjs --check" }
-          node scripts/native-notices-core.mjs
-          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/native-notices-core.mjs" }
-          node scripts/large-store-core.mjs
-          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/large-store-core.mjs" }
-          npm run build
-          if ($LASTEXITCODE -ne 0) { $failed += "npm run build" }
-          npm run test:desktop
-          if ($LASTEXITCODE -ne 0) { $failed += "npm run test:desktop" }
-          node scripts/multigroup-core.mjs
-          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/multigroup-core.mjs" }
-          node scripts/multigroup-desktop.mjs
-          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/multigroup-desktop.mjs" }
-          node scripts/administration-desktop.mjs
-          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/administration-desktop.mjs" }
-          node scripts/windows-service.mjs
-          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/windows-service.mjs" }
-          node scripts/windows-legacy-upgrade.mjs
-          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/windows-legacy-upgrade.mjs" }
-          node scripts/group-read-core.mjs
-          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/group-read-core.mjs" }
-          node scripts/remote-core.mjs
-          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/remote-core.mjs" }
-          node scripts/remote-desktop.mjs
-          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/remote-desktop.mjs" }
-          npm run test:live
-          if ($LASTEXITCODE -ne 0) { $failed += "npm run test:live" }
-          node ../scripts/messenger/relay-wire-contract.mjs
-          if ($LASTEXITCODE -ne 0) { $failed += "node ../scripts/messenger/relay-wire-contract.mjs" }
-          node scripts/lifecycle-core.mjs
-          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/lifecycle-core.mjs" }
-          node scripts/group-lifecycle.mjs
-          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/group-lifecycle.mjs" }
-          node scripts/group-departure.mjs
-          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/group-departure.mjs" }
-          node scripts/group-members-core.mjs
-          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/group-members-core.mjs" }
-          node scripts/rekey-publication.mjs
-          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/rekey-publication.mjs" }
-          node scripts/review-core.mjs
-          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/review-core.mjs" }
-          node scripts/file-queue-core.mjs
-          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/file-queue-core.mjs" }
-          node scripts/folder-core.mjs
-          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/folder-core.mjs" }
-          node scripts/folder-desktop.mjs
-          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/folder-desktop.mjs" }
-          node scripts/compose-drafts-core.mjs
-          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/compose-drafts-core.mjs" }
-          node scripts/compose-drafts-desktop.mjs
-          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/compose-drafts-desktop.mjs" }
-          node scripts/conversation-window-desktop.mjs
-          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/conversation-window-desktop.mjs" }
-          node scripts/conversation-list-desktop.mjs
-          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/conversation-list-desktop.mjs" }
-          node scripts/conversation-read-desktop.mjs
-          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/conversation-read-desktop.mjs" }
-          node scripts/personal-collections-core.mjs
-          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/personal-collections-core.mjs" }
-          node scripts/personal-collections-desktop.mjs
-          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/personal-collections-desktop.mjs" }
-          node scripts/library-settings-desktop.mjs
-          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/library-settings-desktop.mjs" }
-          node scripts/library-reference-core.mjs
-          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/library-reference-core.mjs" }
-          node scripts/library-reference-desktop.mjs
-          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/library-reference-desktop.mjs" }
-          node scripts/screen-lock-core.mjs
-          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/screen-lock-core.mjs" }
-          node scripts/screen-lock-desktop.mjs
-          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/screen-lock-desktop.mjs" }
-          node scripts/scheduled-core.mjs
-          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/scheduled-core.mjs" }
-          node scripts/scheduled-desktop.mjs
-          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/scheduled-desktop.mjs" }
-          node scripts/rich-text-core.mjs
-          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/rich-text-core.mjs" }
-          node scripts/rich-text-desktop.mjs
-          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/rich-text-desktop.mjs" }
-          node scripts/media-queue-desktop.mjs
-          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/media-queue-desktop.mjs" }
-          node scripts/conversation-tools-desktop.mjs
-          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/conversation-tools-desktop.mjs" }
-          node scripts/library-cleanup-core.mjs
-          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/library-cleanup-core.mjs" }
-          node scripts/timetable-notices-core.mjs
-          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/timetable-notices-core.mjs" }
-          node scripts/history-core.mjs
-          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/history-core.mjs" }
-          node scripts/history-desktop.mjs
-          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/history-desktop.mjs" }
-          node scripts/recall-core.mjs
-          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/recall-core.mjs" }
-          node scripts/recall-desktop.mjs
-          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/recall-desktop.mjs" }
-          node scripts/backup-core.mjs
-          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/backup-core.mjs" }
-          node scripts/school-work-core.mjs
-          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/school-work-core.mjs" }
-          node scripts/notes-core.mjs
-          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/notes-core.mjs" }
-          node scripts/self-recovery.mjs
-          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/self-recovery.mjs" }
-          node scripts/recovery-history.mjs
-          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/recovery-history.mjs" }
-          node scripts/backup-desktop.mjs
-          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/backup-desktop.mjs" }
-          node scripts/capture-attachment-desktop.mjs
-          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/capture-attachment-desktop.mjs" }
-          node scripts/school-work-desktop.mjs
-          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/school-work-desktop.mjs" }
-          node scripts/lifecycle-desktop.mjs
-          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/lifecycle-desktop.mjs" }
-          node scripts/windows-input.mjs
-          if ($LASTEXITCODE -ne 0) { $failed += "node scripts/windows-input.mjs" }
-          npm run test:live-desktop
-          if ($LASTEXITCODE -ne 0) { $failed += "npm run test:live-desktop" }
-          npm audit --audit-level=moderate
-          if ($LASTEXITCODE -ne 0) { $failed += "npm audit --audit-level=moderate" }
-          if ($failed.Count) { throw ("Failed checks: " + ($failed -join "; ")) }
-      - name: Build separate teacher and administration installers
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: "false"
-          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
-        run: |
-          $PSNativeCommandUseErrorActionPreference = $true
-          npm run package:win -- --publish never
-          npm run package:win:admin -- --publish never
-      - name: Verify installed application
-        env:
-          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
-          FOREDU_MESSENGER_TEST_AUTH: ${{ secrets.FOREDU_MESSENGER_TEST_AUTH }}
-          FOREDU_TEST_PRODUCTION_RELAY: ${{ (github.event_name == 'push' || inputs.verify_external_relay) && '1' || '' }}
-        run: node scripts/verify-install.mjs
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs/promises';import path from 'node:path';import crypto from 'node:crypto';import assert from 'node:assert/strict';import {spawn,execFile} from 'node:child_process';import {promisify} from 'node:util';
+          const exec=promisify(execFile),base=path.join(process.env.RUNNER_TEMP,'candidate'),role='teacher',installer=path.join(base,'release/ForeduMessenger-SchoolTest-0.1.8-x64.exe'),sha='ec117b555dc8b488fd861ea4c01ed1680254f6e284bec61668f10e11d6eb6b40';
+          assert.equal(crypto.createHash('sha256').update(await fs.readFile(installer)).digest('hex'),sha);const source=JSON.parse(await fs.readFile(path.join(base,'test-results/live-desktop.json'),'utf8'));assert.equal(source.sourceCommit,'30ff4a726971b37d29aabe7d55d7b2a05df4eb0d');assert.equal(source.sourceDirty,false);assert.equal(source.installerSha256,sha);
+          const destination=path.join(process.env.RUNNER_TEMP,'ExactUpdateDiagnostic');const run=(exe,args,env=process.env)=>new Promise((resolve,reject)=>{const p=spawn(exe,args,{env,stdio:'inherit'});p.on('error',reject);p.on('exit',code=>code===0?resolve():reject(Error('child exit '+code)));});
+          await run(installer,['/S','/D='+destination]);
+          const executable=path.join(destination,'ForeduSchoolMessengerTrial.exe');
+          let failed=false;try{await run(process.execPath,['scripts/update-cross-version-desktop.mjs'],{...process.env,FOREDU_UPDATE_EXECUTABLE:executable,FOREDU_UPDATE_INSTALLER:installer,FOREDU_INSTALLER_SHA256:sha});}catch(e){failed=true;console.log('Diagnostic test failed:',e.message);}
+          const updates=path.join(process.env.APPDATA,'ForeduSchoolMessengerTrial','updates');let names=[];try{names=await fs.readdir(updates)}catch{};console.log('Owned update files:',JSON.stringify(names));
+          let config;try{config=JSON.parse(await fs.readFile(path.join(updates,'apply.json'),'utf8'));console.log('Update config:',JSON.stringify({version:config.version,appPid:config.appPid,executable:config.executable,installer:config.installer,resultPath:config.resultPath}));}catch(e){console.log('Update config missing:',e.code||e.message)}
+          try{const b=await fs.readFile(path.join(updates,'apply.ps1'));console.log('Helper bytes/BOM:',b.length,b.subarray(0,3).toString('hex'));}catch(e){console.log('Helper missing:',e.code)}
+          try{console.log('Result:',await fs.readFile(path.join(updates,'result.json'),'utf8'));}catch(e){console.log('Result missing:',e.code)}
+          const ps=path.join(process.env.SystemRoot,'System32/WindowsPowerShell/v1.0/powershell.exe');const commands=[`$t=$null;$e=$null;[System.Management.Automation.Language.Parser]::ParseFile($env:FOREDU_DIAG_HELPER,[ref]$t,[ref]$e)|Out-Null;$e|ForEach-Object{$_.Message}`,`(Get-Item -LiteralPath $env:FOREDU_UPDATE_EXECUTABLE).VersionInfo.ProductVersion`,`Get-CimInstance Win32_Process | Where-Object { $_.Name -like '*Foredu*' -or ($_.Name -like '*powershell*' -and $_.CommandLine -like '*apply.ps1*') } | Select-Object ProcessId,Name,CommandLine | ConvertTo-Json -Compress`];for(const command of commands){try{const r=await exec(ps,['-NoProfile','-Command',command],{env:{...process.env,FOREDU_DIAG_HELPER:path.join(updates,'apply.ps1'),FOREDU_UPDATE_EXECUTABLE:executable}});console.log('Diagnostic:',r.stdout.trim(),r.stderr.trim());}catch(e){console.log('Diagnostic query:',e.stdout,e.stderr)}}
+          if(failed)process.exitCode=1;
+          NODE
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
-          name: messenger-windows-prototype
-          path: |
-            messenger/release/*.exe
-            messenger/target/release/foredu-server.exe
-            messenger/target/release/foredu-native.exe
-            messenger/target/release/foredu-native-input.exe
-            messenger/target/release/*.dll
-            messenger/test-results/
+          name: updater-diagnostic
+          path: messenger/test-results/
           retention-days: 2
