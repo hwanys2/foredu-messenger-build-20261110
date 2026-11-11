@@ -11,12 +11,15 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
-        with:
-          repository: hwanys2/foreducator-frontend
-          ref: ffa7d22b4de890e55cbc79b22264b532fc546e11
-          ssh-key: ${{ secrets.FOREDU_SOURCE_READ_KEY }}
-          persist-credentials: false
+      - name: Retrieve private immutable source and candidate inputs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download mac-018-network-inputs-20261111 --repo hwanys2/foredu-messenger-build-20261110 --dir "$RUNNER_TEMP/foredu-inputs"
+          echo '9fdad35674dedefff786e41c6c957bb56f687fb227768076ae7b48fc4bdcd57b  '"$RUNNER_TEMP/foredu-inputs/mac-source-ffa7d22b.tar.gz" | shasum -a 256 --check
+          tar -xzf "$RUNNER_TEMP/foredu-inputs/mac-source-ffa7d22b.tar.gz" -C "$GITHUB_WORKSPACE"
+          test "$(git rev-parse HEAD)" = ffa7d22b4de890e55cbc79b22264b532fc546e11
+          test -z "$(git status --porcelain)"
       - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903
         with:
           node-version: 26.5.0
@@ -25,11 +28,6 @@ jobs:
       - name: Install pinned test dependencies
         working-directory: messenger
         run: npm ci --no-audit --no-fund
-      - name: Retrieve private exact-archive inputs
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release download mac-018-network-inputs-20261111 --repo hwanys2/foredu-messenger-build-20261110 --dir "$RUNNER_TEMP/foredu-inputs"
       - name: Verify inputs and extract actual Mac application
         working-directory: messenger
         run: |
