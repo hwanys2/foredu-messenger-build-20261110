@@ -14,7 +14,7 @@ jobs:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
         with:
           repository: hwanys2/foreducator-frontend
-          ref: 888da3af095de6eeb41377db32dd3de6f294a6ff
+          ref: 743641719928deafae0ec13811353680211b5b54
           ssh-key: ${{ secrets.FOREDU_DESK020_SOURCE_READ_KEY }}
           persist-credentials: false
       - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903
@@ -30,15 +30,15 @@ jobs:
       - name: Retrieve private exact-archive inputs
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release download desk020-inputs-888da3af --repo hwanys2/foredu-messenger-build-20261110 --dir "$RUNNER_TEMP/foredu-inputs"
+        run: gh release download desk020-inputs-74364171 --repo hwanys2/foredu-messenger-build-20261110 --dir "$RUNNER_TEMP/foredu-inputs"
       - name: Verify exact inputs and extract application
         working-directory: messenger
         env:
-          EXPECTED_INPUTS: '{"ForeduMessenger-Teacher-SchoolTest-0.2.0-mac-arm64.zip":"99e89d530694574695f7d6fb1556af7c69a27433f2d9b9308f2c8e581bf2c215","mac-native-arm64.tar.gz":"e95aaa5a266c344f15223272efb186fb3688f18582486040b65e77cd0980a218"}'
+          EXPECTED_INPUTS: '{"ForeduMessenger-Teacher-SchoolTest-0.2.0-mac-arm64.zip":"de92d79ac2a1128b863842a2f7ebee94a3c2eb00b02ddd1a985dd46b06f05bd2","mac-native-arm64.tar.gz":"e95aaa5a266c344f15223272efb186fb3688f18582486040b65e77cd0980a218"}'
         run: |
           node --input-type=module <<'JS'
           import fs from 'node:fs/promises';import {createReadStream} from 'node:fs';import crypto from 'node:crypto';import assert from 'node:assert/strict';import path from 'node:path';import {sourceEvidence} from './scripts/release-evidence.mjs';
-          assert.equal(process.platform,'darwin');assert.equal(process.arch,'arm64');assert.deepEqual(sourceEvidence(),{sourceCommit:'888da3af095de6eeb41377db32dd3de6f294a6ff',sourceDirty:false});
+          assert.equal(process.platform,'darwin');assert.equal(process.arch,'arm64');assert.deepEqual(sourceEvidence(),{sourceCommit:'743641719928deafae0ec13811353680211b5b54',sourceDirty:false});
           const inputs=JSON.parse(process.env.EXPECTED_INPUTS);for(const [name,hash]of Object.entries(inputs)){const h=crypto.createHash('sha256');for await(const b of createReadStream(path.join(process.env.RUNNER_TEMP,'foredu-inputs',name)))h.update(b);assert.equal(h.digest('hex'),hash);}
           await fs.mkdir('test-results',{recursive:true});await fs.writeFile('test-results/mac-network-inputs.json',JSON.stringify({ok:true,...sourceEvidence(),platform:process.platform,architecture:process.arch,inputs,githubRunId:process.env.GITHUB_RUN_ID},null,2));
           JS
@@ -53,7 +53,7 @@ jobs:
         working-directory: messenger
         env:
           FOREDU_MESSENGER_TEST_AUTH: ${{ secrets.FOREDU_DESK020_AUTH_MAC }}
-          FOREDU_INSTALLER_SHA256: 99e89d530694574695f7d6fb1556af7c69a27433f2d9b9308f2c8e581bf2c215
+          FOREDU_INSTALLER_SHA256: de92d79ac2a1128b863842a2f7ebee94a3c2eb00b02ddd1a985dd46b06f05bd2
           FOREDU_LICENSE_AUTO: '0'
         run: |
           node scripts/external-production.mjs
