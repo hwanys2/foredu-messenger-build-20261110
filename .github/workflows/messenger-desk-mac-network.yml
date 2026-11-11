@@ -1,0 +1,64 @@
+name: Desktop workspace exact Mac archive verification
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: desktop-workspace-mac
+  cancel-in-progress: false
+jobs:
+  mac-network:
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
+        with:
+          repository: hwanys2/foreducator-frontend
+          ref: d48a77fde4c75059594c6ba1b51b3c96b39a5955
+          ssh-key: ${{ secrets.FOREDU_DESK020_SOURCE_READ_KEY }}
+          persist-credentials: false
+      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903
+        with:
+          node-version: 26.5.0
+          cache: npm
+          cache-dependency-path: messenger/package-lock.json
+      - name: Install pinned test dependencies
+        working-directory: messenger
+        run: npm ci --no-audit --no-fund
+      - name: Retrieve private exact-archive inputs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download desk020-inputs-d48a77fd --repo hwanys2/foredu-messenger-build-20261110 --dir "$RUNNER_TEMP/foredu-inputs"
+      - name: Verify exact inputs and extract application
+        working-directory: messenger
+        env:
+          EXPECTED_INPUTS: '{"ForeduMessenger-Teacher-SchoolTest-0.2.0-mac-arm64.zip":"62a0386291172a545fa60b4696d9a09db79019dba97b4e9e282eced492167ab8","mac-native-arm64.tar.gz":"f7138bab37de6df16d799f46e69fd53e1c2bd2b6739bf23a9bd7f06a6133b58f"}'
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs/promises';import {createReadStream} from 'node:fs';import crypto from 'node:crypto';import assert from 'node:assert/strict';import path from 'node:path';import {sourceEvidence} from './scripts/release-evidence.mjs';
+          assert.equal(process.platform,'darwin');assert.equal(process.arch,'arm64');assert.deepEqual(sourceEvidence(),{sourceCommit:'d48a77fde4c75059594c6ba1b51b3c96b39a5955',sourceDirty:false});
+          const inputs=JSON.parse(process.env.EXPECTED_INPUTS);for(const [name,hash]of Object.entries(inputs)){const h=crypto.createHash('sha256');for await(const b of createReadStream(path.join(process.env.RUNNER_TEMP,'foredu-inputs',name)))h.update(b);assert.equal(h.digest('hex'),hash);}
+          await fs.mkdir('test-results',{recursive:true});await fs.writeFile('test-results/mac-network-inputs.json',JSON.stringify({ok:true,...sourceEvidence(),platform:process.platform,architecture:process.arch,inputs,githubRunId:process.env.GITHUB_RUN_ID},null,2));
+          JS
+          mkdir -p target/release "$RUNNER_TEMP/foredu-installed"
+          tar -xzf "$RUNNER_TEMP/foredu-inputs/mac-native-arm64.tar.gz" -C target/release
+          ditto -x -k "$RUNNER_TEMP/foredu-inputs/ForeduMessenger-Teacher-SchoolTest-0.2.0-mac-arm64.zip" "$RUNNER_TEMP/foredu-installed"
+          codesign --verify --deep --strict "$RUNNER_TEMP/foredu-installed/ForeduSchoolMessengerTrial.app"
+          test "$(lipo -archs "$RUNNER_TEMP/foredu-installed/ForeduSchoolMessengerTrial.app/Contents/MacOS/ForeduSchoolMessengerTrial")" = arm64
+          echo "ELECTRON_EXECUTABLE=$RUNNER_TEMP/foredu-installed/ForeduSchoolMessengerTrial.app/Contents/MacOS/ForeduSchoolMessengerTrial" >> "$GITHUB_ENV"
+          echo "FOREDU_NATIVE_BIN_DIR=$GITHUB_WORKSPACE/messenger/target/release" >> "$GITHUB_ENV"
+      - name: Verify actual production relay and linked desktop widgets
+        working-directory: messenger
+        env:
+          FOREDU_MESSENGER_TEST_AUTH: ${{ secrets.FOREDU_DESK020_AUTH_MAC }}
+          FOREDU_INSTALLER_SHA256: 62a0386291172a545fa60b4696d9a09db79019dba97b4e9e282eced492167ab8
+          FOREDU_LICENSE_AUTO: '0'
+        run: |
+          node scripts/external-production.mjs
+          node scripts/desk-linked-desktop.mjs
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: desktop-workspace-exact-mac-network
+          path: messenger/test-results/
+          retention-days: 2
