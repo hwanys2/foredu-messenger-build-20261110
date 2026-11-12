@@ -29,7 +29,7 @@ jobs:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           repository: hwanys2/foreducator-frontend
-          ref: 0995fc7e2b82eeece575949129d7408f8d8ff6f6
+          ref: e4c6085eaa790b49bc54b306a97af74738c5088a
           ssh-key: ${{ secrets.FOREDU_ADMIN022_SOURCE_READ_KEY }}
           persist-credentials: false
       - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
@@ -112,6 +112,7 @@ jobs:
           FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
           FOREDU_MESSENGER_TEST_AUTH: ${{ secrets.FOREDU_ADMIN022_AUTH }}
           FOREDU_EXTERNAL_SOURCE_ONLY: '1'
+          FOREDU_EXTERNAL_TRACE: '1'
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
           npm run build
