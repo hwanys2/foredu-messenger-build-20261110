@@ -29,7 +29,7 @@ jobs:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           repository: hwanys2/foreducator-frontend
-          ref: 21f2324a3a3556f3dc20d687cd4a2c9ee719066b
+          ref: 0995fc7e2b82eeece575949129d7408f8d8ff6f6
           ssh-key: ${{ secrets.FOREDU_ADMIN022_SOURCE_READ_KEY }}
           persist-credentials: false
       - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
@@ -107,6 +107,16 @@ jobs:
           }
       - name: Prepare app-local Windows runtime
         run: ./scripts/windows-runtime.ps1
+      - name: Verify actual outside photo before packaging
+        env:
+          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
+          FOREDU_MESSENGER_TEST_AUTH: ${{ secrets.FOREDU_ADMIN022_AUTH }}
+          FOREDU_EXTERNAL_SOURCE_ONLY: '1'
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          npm run build
+          $env:ELECTRON_EXECUTABLE = node -p "require('electron')"
+          node scripts/external-production.mjs
       - name: Verify actual screen capture and window restoration
         env:
           FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
@@ -162,6 +172,17 @@ jobs:
           npm run package:win -- --publish never
           npm run package:win:admin -- --publish never
           node scripts/build-update-fixtures.mjs
+      - name: Verify initial exact installed production connection
+        env:
+          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
+          FOREDU_MESSENGER_TEST_AUTH: ${{ secrets.FOREDU_ADMIN022_AUTH }}
+          FOREDU_LICENSE_AUTO: '0'
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          node node_modules/playwright/cli.js install chromium
+          @'
+          import{spawn}from'node:child_process';import path from'node:path';import fs from'node:fs/promises';import{fileHash}from'./scripts/release-evidence.mjs';const dest=path.join(process.env.RUNNER_TEMP,'ForeduSchoolInstalledVerification','teacher'),installer=path.resolve('release/ForeduMessenger-SchoolTest-0.2.2-x64.exe'),exe=path.join(dest,'ForeduSchoolMessengerTrial.exe');const run=(cmd,args,env=process.env)=>new Promise((ok,no)=>{const p=spawn(cmd,args,{env,stdio:'inherit'});p.once('error',no);p.once('exit',c=>c===0?ok():no(Error('Installed production preflight failed '+c)));});await run(installer,['/S','/D='+dest]);const env={...process.env,ELECTRON_EXECUTABLE:exe,FOREDU_INSTALLER_SHA256:await fileHash(installer)};await run(process.execPath,['scripts/external-production.mjs'],env);await fs.copyFile('test-results/external-installed.json','test-results/external-preflight.json');await run(process.execPath,['scripts/desk-linked-desktop.mjs'],env);await fs.copyFile('test-results/desk-linked-desktop.json','test-results/desk-linked-preflight.json');
+          '@ | node --input-type=module
       - name: Verify installer upgrades existing school services before login
         env:
           FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
@@ -230,18 +251,6 @@ jobs:
           node scripts/lifecycle-desktop.mjs
           node scripts/windows-input.mjs
           npm audit --audit-level=moderate
-      - name: Verify initial exact installed production connection
-        continue-on-error: true
-        env:
-          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
-          FOREDU_MESSENGER_TEST_AUTH: ${{ secrets.FOREDU_ADMIN022_AUTH }}
-          FOREDU_LICENSE_AUTO: '0'
-        run: |
-          $PSNativeCommandUseErrorActionPreference = $true
-          node node_modules/playwright/cli.js install chromium
-          @'
-          import{spawn}from'node:child_process';import path from'node:path';import fs from'node:fs/promises';import{fileHash}from'./scripts/release-evidence.mjs';const dest=path.join(process.env.RUNNER_TEMP,'ForeduSchoolInstalledVerification','teacher'),installer=path.resolve('release/ForeduMessenger-SchoolTest-0.2.2-x64.exe'),exe=path.join(dest,'ForeduSchoolMessengerTrial.exe');const run=(cmd,args,env=process.env)=>new Promise((ok,no)=>{const p=spawn(cmd,args,{env,stdio:'inherit'});p.once('error',no);p.once('exit',c=>c===0?ok():no(Error('Installed production preflight failed '+c)));});await run(installer,['/S','/D='+dest]);const env={...process.env,ELECTRON_EXECUTABLE:exe,FOREDU_INSTALLER_SHA256:await fileHash(installer)};await run(process.execPath,['scripts/external-production.mjs'],env);await fs.copyFile('test-results/external-installed.json','test-results/external-preflight.json');await run(process.execPath,['scripts/desk-linked-desktop.mjs'],env);await fs.copyFile('test-results/desk-linked-desktop.json','test-results/desk-linked-preflight.json');
-          '@ | node --input-type=module
       - name: Verify installed application
         env:
           FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
