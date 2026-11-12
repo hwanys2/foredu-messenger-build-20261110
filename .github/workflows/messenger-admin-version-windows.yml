@@ -1,0 +1,165 @@
+name: School server version 0.2.2 installed verification
+on:
+  workflow_dispatch:
+    inputs:
+      native_source_run:
+        description: Completed Windows native run with identical Rust inputs (optional)
+        required: false
+        type: string
+      verify_external_relay:
+        description: Verify installed apps against the deployed relay with synthetic accounts
+        required: false
+        default: false
+        type: boolean
+concurrency:
+  group: messenger-windows-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+  actions: read
+jobs:
+  windows:
+    runs-on: windows-2025
+    timeout-minutes: 90
+    defaults:
+      run:
+        working-directory: messenger
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          repository: hwanys2/foreducator-frontend
+          ref: 15e5d82a20f203bdc6ca574a15950a4476d3fe73
+          ssh-key: ${{ secrets.FOREDU_ADMIN022_SOURCE_READ_KEY }}
+          persist-credentials: false
+      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+        with:
+          node-version: 26.5.0
+          cache: npm
+          cache-dependency-path: messenger/package-lock.json
+      - name: Install pinned Rust toolchain
+        if: ${{ !inputs.native_source_run }}
+        run: rustup toolchain install 1.99.1 --profile minimal --component rustfmt --component clippy
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        if: ${{ !inputs.native_source_run }}
+        id: rust-cache
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            messenger/target
+          key: messenger-windows-rust-1.99.1-${{ hashFiles('messenger/Cargo.lock') }}
+          restore-keys: messenger-windows-rust-1.99.1-
+      - name: Install dependencies
+        run: npm ci
+      - name: Ensure Electron binary is available
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          node scripts/ensure-electron.mjs
+          node scripts/ensure-builder-tools.mjs
+      - name: Verify Rust formatting
+        if: ${{ !inputs.native_source_run }}
+        run: cargo fmt --all --check
+      - name: Check native core
+        if: ${{ !inputs.native_source_run }}
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: Test native core
+        if: ${{ !inputs.native_source_run }}
+        run: cargo test --workspace --locked
+      - name: Build native executables
+        if: ${{ !inputs.native_source_run }}
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          cargo build --release --workspace --locked
+          ./target/release/foredu-native-input.exe --probe
+      - name: Save native dependencies before desktop verification
+        if: ${{ !inputs.native_source_run && steps.rust-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            messenger/target
+          key: messenger-windows-rust-1.99.1-${{ hashFiles('messenger/Cargo.lock') }}
+      - name: Verify existing native build provenance
+        if: ${{ inputs.native_source_run }}
+        env:
+          NATIVE_SOURCE_RUN: ${{ inputs.native_source_run }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/verify-native-artifact.mjs
+      - name: Retrieve verified native artifact
+        if: ${{ inputs.native_source_run }}
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: messenger-windows-prototype
+          path: messenger/imported-native
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.native_source_run }}
+      - name: Prepare existing native executables
+        if: ${{ inputs.native_source_run }}
+        run: |
+          New-Item -ItemType Directory -Force target/release | Out-Null
+          foreach ($name in @('foredu-server.exe','foredu-native.exe','foredu-native-input.exe')) {
+            $files = @(Get-ChildItem imported-native -Filter $name -File -Recurse)
+            if ($files.Length -ne 1) { throw "A unique verified native executable is required." }
+            Copy-Item -LiteralPath $files[0].FullName -Destination (Join-Path target/release $name)
+          }
+      - name: Prepare app-local Windows runtime
+        run: ./scripts/windows-runtime.ps1
+      - name: Verify affected native and application contracts
+        env:
+          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          npm test
+          node scripts/third-party-notices.mjs --check
+          node scripts/native-notices.mjs --check
+          node scripts/native-notices-core.mjs
+          node scripts/desk-core.mjs
+          node scripts/server-resume-core.mjs
+          node scripts/school-bells-core.mjs
+          node scripts/live-core.mjs
+          node scripts/windows-service.mjs
+          node scripts/windows-legacy-upgrade.mjs
+          node scripts/windows-update-launcher.mjs
+      - name: Build separate teacher and administration installers
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          npm run package:win -- --publish never
+          npm run package:win:admin -- --publish never
+          node scripts/build-update-fixtures.mjs
+      - name: Verify initial exact installed production connection
+        continue-on-error: true
+        env:
+          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
+          FOREDU_MESSENGER_TEST_AUTH: ${{ secrets.FOREDU_ADMIN022_AUTH }}
+          FOREDU_LICENSE_AUTO: '0'
+        run: |
+          @'
+          import{spawn}from'node:child_process';import path from'node:path';import fs from'node:fs/promises';import{fileHash}from'./scripts/release-evidence.mjs';const dest=path.join(process.env.RUNNER_TEMP,'ForeduSchoolInstalledVerification','teacher'),installer=path.resolve('release/ForeduMessenger-SchoolTest-0.2.2-x64.exe'),exe=path.join(dest,'ForeduSchoolMessengerTrial.exe');const run=(cmd,args,env=process.env)=>new Promise((ok,no)=>{const p=spawn(cmd,args,{env,stdio:'inherit'});p.once('error',no);p.once('exit',c=>c===0?ok():no(Error('Installed production preflight failed '+c)));});await run(installer,['/S','/D='+dest]);const env={...process.env,ELECTRON_EXECUTABLE:exe,FOREDU_INSTALLER_SHA256:await fileHash(installer)};await run(process.execPath,['scripts/external-production.mjs'],env);await fs.copyFile('test-results/external-installed.json','test-results/external-preflight.json');await run(process.execPath,['scripts/desk-linked-desktop.mjs'],env);await fs.copyFile('test-results/desk-linked-desktop.json','test-results/desk-linked-preflight.json');
+          '@ | node --input-type=module
+      - name: Verify installed application
+        env:
+          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
+          FOREDU_MESSENGER_TEST_AUTH: ${{ secrets.FOREDU_ADMIN022_AUTH }}
+          FOREDU_TEST_PRODUCTION_RELAY: ${{ (github.event_name == 'push' || inputs.verify_external_relay) && '1' || '' }}
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          node node_modules/playwright/cli.js install chromium
+          node scripts/verify-install.mjs
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: messenger-windows-prototype
+          path: |
+            messenger/release/*.exe
+            messenger/target/release/foredu-server.exe
+            messenger/target/release/foredu-native.exe
+            messenger/target/release/foredu-native-input.exe
+            messenger/target/release/*.dll
+            messenger/test-results/
+          retention-days: 2
