@@ -14,8 +14,8 @@ jobs:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
         with:
           repository: hwanys2/foreducator-frontend
-          ref: a902679ad0e013db370669b18f0c3c03e7b1b26e
-          ssh-key: ${{ secrets.FOREDU_DESK020_SOURCE_READ_KEY }}
+          ref: aecb548e9a13cd4165856fd3000126111745fad1
+          ssh-key: ${{ secrets.FOREDU_ADMIN021_SOURCE_READ_KEY }}
           persist-credentials: false
       - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903
         with:
@@ -30,21 +30,21 @@ jobs:
       - name: Retrieve private exact-archive inputs
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release download desk020-inputs-a902679a --repo hwanys2/foredu-messenger-build-20261110 --dir "$RUNNER_TEMP/foredu-inputs"
+        run: gh release download admin021-inputs-aecb548e --repo hwanys2/foredu-messenger-build-20261110 --dir "$RUNNER_TEMP/foredu-inputs"
       - name: Verify exact inputs and extract application
         working-directory: messenger
         env:
-          EXPECTED_INPUTS: '{"ForeduMessenger-Teacher-SchoolTest-0.2.0-mac-arm64.zip":"de92d79ac2a1128b863842a2f7ebee94a3c2eb00b02ddd1a985dd46b06f05bd2","mac-native-arm64.tar.gz":"e95aaa5a266c344f15223272efb186fb3688f18582486040b65e77cd0980a218"}'
+          EXPECTED_INPUTS: '{"ForeduMessenger-Teacher-SchoolTest-0.2.1-mac-arm64.zip":"2a7c242d40552d88a365373886f70c465cc8c7b70c66f1cf76677dc19c140219","mac-native-arm64.tar.gz":"30b930652269155a120e7454be5d7b58112e3ad9de31b55374afc9d849d45fdb"}'
         run: |
           node --input-type=module <<'JS'
           import fs from 'node:fs/promises';import {createReadStream} from 'node:fs';import crypto from 'node:crypto';import assert from 'node:assert/strict';import path from 'node:path';import {sourceEvidence} from './scripts/release-evidence.mjs';
-          assert.equal(process.platform,'darwin');assert.equal(process.arch,'arm64');assert.deepEqual(sourceEvidence(),{sourceCommit:'a902679ad0e013db370669b18f0c3c03e7b1b26e',sourceDirty:false});
+          assert.equal(process.platform,'darwin');assert.equal(process.arch,'arm64');assert.deepEqual(sourceEvidence(),{sourceCommit:'aecb548e9a13cd4165856fd3000126111745fad1',sourceDirty:false});
           const inputs=JSON.parse(process.env.EXPECTED_INPUTS);for(const [name,hash]of Object.entries(inputs)){const h=crypto.createHash('sha256');for await(const b of createReadStream(path.join(process.env.RUNNER_TEMP,'foredu-inputs',name)))h.update(b);assert.equal(h.digest('hex'),hash);}
           await fs.mkdir('test-results',{recursive:true});await fs.writeFile('test-results/mac-network-inputs.json',JSON.stringify({ok:true,...sourceEvidence(),platform:process.platform,architecture:process.arch,inputs,githubRunId:process.env.GITHUB_RUN_ID},null,2));
           JS
           mkdir -p target/release "$RUNNER_TEMP/foredu-installed"
           tar -xzf "$RUNNER_TEMP/foredu-inputs/mac-native-arm64.tar.gz" -C target/release
-          ditto -x -k "$RUNNER_TEMP/foredu-inputs/ForeduMessenger-Teacher-SchoolTest-0.2.0-mac-arm64.zip" "$RUNNER_TEMP/foredu-installed"
+          ditto -x -k "$RUNNER_TEMP/foredu-inputs/ForeduMessenger-Teacher-SchoolTest-0.2.1-mac-arm64.zip" "$RUNNER_TEMP/foredu-installed"
           codesign --verify --deep --strict "$RUNNER_TEMP/foredu-installed/ForeduSchoolMessengerTrial.app"
           test "$(lipo -archs "$RUNNER_TEMP/foredu-installed/ForeduSchoolMessengerTrial.app/Contents/MacOS/ForeduSchoolMessengerTrial")" = arm64
           echo "ELECTRON_EXECUTABLE=$RUNNER_TEMP/foredu-installed/ForeduSchoolMessengerTrial.app/Contents/MacOS/ForeduSchoolMessengerTrial" >> "$GITHUB_ENV"
@@ -52,8 +52,8 @@ jobs:
       - name: Verify actual production relay and linked desktop widgets
         working-directory: messenger
         env:
-          FOREDU_MESSENGER_TEST_AUTH: ${{ secrets.FOREDU_DESK020_AUTH_MAC }}
-          FOREDU_INSTALLER_SHA256: de92d79ac2a1128b863842a2f7ebee94a3c2eb00b02ddd1a985dd46b06f05bd2
+          FOREDU_MESSENGER_TEST_AUTH: ${{ secrets.FOREDU_ADMIN021_AUTH_MAC }}
+          FOREDU_INSTALLER_SHA256: 2a7c242d40552d88a365373886f70c465cc8c7b70c66f1cf76677dc19c140219
           FOREDU_LICENSE_AUTO: '0'
         run: |
           node scripts/external-production.mjs
