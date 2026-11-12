@@ -1,4 +1,4 @@
-name: School server version 0.2.3 installed verification
+name: School server version 0.2.4 installed verification
 on:
   workflow_dispatch:
     inputs:
@@ -29,14 +29,16 @@ jobs:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           repository: hwanys2/foreducator-frontend
-          ref: 0212c2ccbbb25a0f631566092c27851e3e82e98c
-          ssh-key: ${{ secrets.FOREDU_HOTFIX023_SOURCE_READ_KEY }}
+          ref: 58185973e2a599083fdfebd6fd6f6c15de58703c
+          ssh-key: ${{ secrets.FOREDU_HOTFIX024_SOURCE_READ_KEY }}
           persist-credentials: false
       - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
         with:
           node-version: 26.5.0
           cache: npm
           cache-dependency-path: messenger/package-lock.json
+      - name: Verify Windows updater syntax
+        run: node scripts/windows-updater-syntax.mjs
       - name: Install pinned Rust toolchain
         if: ${{ !inputs.native_source_run }}
         run: rustup toolchain install 1.99.1 --profile minimal --component rustfmt --component clippy
@@ -117,6 +119,14 @@ jobs:
           $env:FOREDU_CAPTURE_PRODUCT_VIDEO = '1'
           node scripts/remote-desktop.mjs
           Remove-Item Env:FOREDU_CAPTURE_PRODUCT_VIDEO
+      - name: Verify stop-denied school service recovery
+        env:
+          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
+        run: node scripts/windows-service.mjs
+      - name: Verify first login and offline group messaging
+        env:
+          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
+        run: node scripts/first-login-core.mjs
       - name: Verify existing attachment read state during upgrade
         env:
           FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
@@ -156,7 +166,7 @@ jobs:
       - name: Verify actual outside photo before packaging
         env:
           FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
-          FOREDU_MESSENGER_TEST_AUTH: ${{ secrets.FOREDU_HOTFIX023_AUTH }}
+          FOREDU_MESSENGER_TEST_AUTH: ${{ secrets.FOREDU_HOTFIX024_AUTH }}
           FOREDU_EXTERNAL_SOURCE_ONLY: '1'
           FOREDU_EXTERNAL_TRACE: '1'
         run: |
@@ -176,18 +186,18 @@ jobs:
       - name: Verify initial exact installed production connection
         env:
           FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
-          FOREDU_MESSENGER_TEST_AUTH: ${{ secrets.FOREDU_HOTFIX023_AUTH }}
+          FOREDU_MESSENGER_TEST_AUTH: ${{ secrets.FOREDU_HOTFIX024_AUTH }}
           FOREDU_LICENSE_AUTO: '0'
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
           node node_modules/playwright/cli.js install chromium
           @'
-          import{spawn}from'node:child_process';import path from'node:path';import fs from'node:fs/promises';import{fileHash}from'./scripts/release-evidence.mjs';const dest=path.join(process.env.RUNNER_TEMP,'ForeduSchoolInstalledVerification','teacher'),installer=path.resolve('release/ForeduMessenger-SchoolTest-0.2.3-x64.exe'),exe=path.join(dest,'ForeduSchoolMessengerTrial.exe');const run=(cmd,args,env=process.env)=>new Promise((ok,no)=>{const p=spawn(cmd,args,{env,stdio:'inherit'});p.once('error',no);p.once('exit',c=>c===0?ok():no(Error('Installed production preflight failed '+c)));});await run(installer,['/S','/D='+dest]);const env={...process.env,ELECTRON_EXECUTABLE:exe,FOREDU_INSTALLER_SHA256:await fileHash(installer)};await run(process.execPath,['scripts/external-production.mjs'],env);await fs.copyFile('test-results/external-installed.json','test-results/external-preflight.json');await run(process.execPath,['scripts/desk-linked-desktop.mjs'],env);await fs.copyFile('test-results/desk-linked-desktop.json','test-results/desk-linked-preflight.json');
+          import{spawn}from'node:child_process';import path from'node:path';import fs from'node:fs/promises';import{fileHash}from'./scripts/release-evidence.mjs';const dest=path.join(process.env.RUNNER_TEMP,'ForeduSchoolInstalledVerification','teacher'),installer=path.resolve('release/ForeduMessenger-SchoolTest-0.2.4-x64.exe'),exe=path.join(dest,'ForeduSchoolMessengerTrial.exe');const run=(cmd,args,env=process.env)=>new Promise((ok,no)=>{const p=spawn(cmd,args,{env,stdio:'inherit'});p.once('error',no);p.once('exit',c=>c===0?ok():no(Error('Installed production preflight failed '+c)));});await run(installer,['/S','/D='+dest]);const env={...process.env,ELECTRON_EXECUTABLE:exe,FOREDU_INSTALLER_SHA256:await fileHash(installer)};await run(process.execPath,['scripts/external-production.mjs'],env);await fs.copyFile('test-results/external-installed.json','test-results/external-preflight.json');await run(process.execPath,['scripts/desk-linked-desktop.mjs'],env);await fs.copyFile('test-results/desk-linked-desktop.json','test-results/desk-linked-preflight.json');
           '@ | node --input-type=module
       - name: Verify installer upgrades existing school services before login
         env:
           FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
-          FOREDU_UPDATE_INSTALLER: ${{ github.workspace }}/messenger/release/ForeduMessenger-Administration-SchoolTest-0.2.3-x64.exe
+          FOREDU_UPDATE_INSTALLER: ${{ github.workspace }}/messenger/release/ForeduMessenger-Administration-SchoolTest-0.2.4-x64.exe
         run: node scripts/windows-server-reinstall.mjs
       - name: Verify client and Electron windows
         env:
@@ -209,7 +219,6 @@ jobs:
           node scripts/multigroup-core.mjs
           node scripts/multigroup-desktop.mjs
           node scripts/administration-desktop.mjs
-          node scripts/windows-service.mjs
           node scripts/windows-legacy-upgrade.mjs
           node scripts/windows-update-launcher.mjs
           node scripts/group-read-core.mjs
@@ -258,7 +267,7 @@ jobs:
       - name: Verify installed application
         env:
           FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
-          FOREDU_MESSENGER_TEST_AUTH: ${{ secrets.FOREDU_HOTFIX023_AUTH }}
+          FOREDU_MESSENGER_TEST_AUTH: ${{ secrets.FOREDU_HOTFIX024_AUTH }}
           FOREDU_TEST_PRODUCTION_RELAY: ${{ (github.event_name == 'push' || inputs.verify_external_relay) && '1' || '' }}
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
