@@ -29,7 +29,7 @@ jobs:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           repository: hwanys2/foreducator-frontend
-          ref: ae67b707ef9174e9a4084ccdf182f48f88256678
+          ref: 7aa5c599b9d51c8ab145b60d1df4833ba26d6e37
           ssh-key: ${{ secrets.FOREDU_HOTFIX023_SOURCE_READ_KEY }}
           persist-credentials: false
       - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
@@ -107,17 +107,6 @@ jobs:
           }
       - name: Prepare app-local Windows runtime
         run: ./scripts/windows-runtime.ps1
-      - name: Verify actual outside photo before packaging
-        env:
-          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
-          FOREDU_MESSENGER_TEST_AUTH: ${{ secrets.FOREDU_HOTFIX023_AUTH }}
-          FOREDU_EXTERNAL_SOURCE_ONLY: '1'
-          FOREDU_EXTERNAL_TRACE: '1'
-        run: |
-          $PSNativeCommandUseErrorActionPreference = $true
-          npm run build
-          $env:ELECTRON_EXECUTABLE = node -p "require('electron')"
-          node scripts/external-production.mjs
       - name: Verify actual screen capture and window restoration
         env:
           FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
@@ -164,6 +153,17 @@ jobs:
         env:
           FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
         run: node scripts/backup-desktop.mjs
+      - name: Verify actual outside photo before packaging
+        env:
+          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
+          FOREDU_MESSENGER_TEST_AUTH: ${{ secrets.FOREDU_HOTFIX023_AUTH }}
+          FOREDU_EXTERNAL_SOURCE_ONLY: '1'
+          FOREDU_EXTERNAL_TRACE: '1'
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          npm run build
+          $env:ELECTRON_EXECUTABLE = node -p "require('electron')"
+          node scripts/external-production.mjs
       - name: Build separate teacher and administration installers
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
