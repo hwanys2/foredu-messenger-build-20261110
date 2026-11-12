@@ -202,7 +202,6 @@ jobs:
           name: messenger-windows-prototype
           path: |
             messenger/release/*.exe
-            messenger/release/update-fixtures/*.exe
             messenger/target/release/foredu-server.exe
             messenger/target/release/foredu-native.exe
             messenger/target/release/foredu-native-input.exe
