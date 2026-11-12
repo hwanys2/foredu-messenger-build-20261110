@@ -55,18 +55,22 @@ jobs:
           const watchRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'foredu-installer-diagnosis-'));
           const records = [];
           const seen = new Set();
-          const watcher = fs.watch(watchRoot, { recursive: true }, (_event, file) => {
-            if (!file || !file.endsWith('foredu-server-update-result.json')) return;
+          const timer = setInterval(() => {
             try {
-              const value = JSON.parse(fs.readFileSync(path.join(watchRoot, file), 'utf8'));
-              const safe = Object.fromEntries(['ok','stage','type','resultCode','rollbackOk','version'].map(k => [k,value[k]]));
-              if (seen.has(JSON.stringify(safe))) return;
-              seen.add(JSON.stringify(safe)); records.push(safe);
-              fs.writeFileSync('test-results/nsis-server-update-diagnostic.json', JSON.stringify({diagnosticOnly:true,records},null,2));
-              console.log('Installer helper status:', JSON.stringify(safe));
+              for (const entry of fs.readdirSync(watchRoot,{withFileTypes:true})) {
+                if (!entry.isDirectory() || !/^ns[a-z0-9]+\.tmp$/i.test(entry.name)) continue;
+                try {
+                  const value = JSON.parse(fs.readFileSync(path.join(watchRoot,entry.name,'foredu-server-update-result.json'),'utf8'));
+                  const safe = Object.fromEntries(['ok','stage','type','resultCode','rollbackOk','version'].map(k => [k,value[k]]));
+                  if (seen.has(JSON.stringify(safe))) continue;
+                  seen.add(JSON.stringify(safe)); records.push(safe);
+                  fs.writeFileSync('test-results/nsis-server-update-diagnostic.json',JSON.stringify({diagnosticOnly:true,records},null,2));
+                  console.log('Installer helper status:',JSON.stringify(safe));
+                } catch {}
+              }
             } catch {}
-          });
-          watcher.on('error', () => console.log('Temporary diagnostic watcher unavailable.'));
+          },5);
+          const watcher = {close:() => clearInterval(timer)};
           const test = 'scripts/windows-server-reinstall.mjs';
           const original = await fsp.readFile(test, 'utf8');
           const normalized = original.replace(/\r\n/g, '\n');
