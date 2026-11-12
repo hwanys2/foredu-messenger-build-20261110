@@ -66,10 +66,12 @@ jobs:
               console.log('Installer helper status:', JSON.stringify(safe));
             } catch {}
           });
+          watcher.on('error', () => console.log('Temporary diagnostic watcher unavailable.'));
           const test = 'scripts/windows-server-reinstall.mjs';
           const original = await fsp.readFile(test, 'utf8');
+          const normalized = original.replace(/\r\n/g, '\n');
           const marker = '} finally {\n  if (app) await app.close()';
-          if (!original.includes(marker)) throw Error('Expected diagnostic insertion point.');
+          if (!normalized.includes(marker)) throw Error('Expected diagnostic insertion point.');
           const diagnostic = `} catch (originalError) {
             console.log('Diagnostic only: installer failure was retained.');
             const info = await powershell("$s=Get-CimInstance Win32_Service -Filter \\\"Name='ForeduSchoolMessenger'\\\"; @{serviceState=$s.State;servicePath=$s.PathName;diagnosticProcess64=[Environment]::Is64BitProcess;programFiles=[Environment]::GetFolderPath('ProgramFiles')}|ConvertTo-Json -Compress").catch(()=> '{}');
@@ -88,10 +90,10 @@ jobs:
             }
             throw originalError;
           `;
-          await fsp.writeFile(test, original.replace(marker, diagnostic + marker));
+          await fsp.writeFile(test, normalized.replace(marker, diagnostic + marker).replace('path.join(os.tmpdir(),', 'path.join(process.env.FOREDU_DIAG_DATA_ROOT,'));
           try {
             const code = await new Promise((resolve,reject) => {
-              const child = spawn(process.execPath,[test], {stdio:'inherit',env:{...process.env,TEMP:watchRoot,TMP:watchRoot,FOREDU_SERVICE_UPGRADE_CASE:'0.1.5'}});
+              const child = spawn(process.execPath,[test], {stdio:'inherit',env:{...process.env,TEMP:watchRoot,TMP:watchRoot,FOREDU_DIAG_DATA_ROOT:os.tmpdir(),FOREDU_SERVICE_UPGRADE_CASE:'0.1.5'}});
               child.once('error',reject); child.once('exit',resolve);
             });
             console.log('Diagnostic retained installer exit:', code);
