@@ -107,7 +107,7 @@ jobs:
           }
       - name: Prepare app-local Windows runtime
         run: ./scripts/windows-runtime.ps1
-      - name: Verify affected native and application contracts
+      - name: Verify client and Electron windows
         env:
           FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
         run: |
@@ -119,10 +119,65 @@ jobs:
           node scripts/desk-core.mjs
           node scripts/server-resume-core.mjs
           node scripts/school-bells-core.mjs
-          node scripts/live-core.mjs
+          node scripts/large-store-core.mjs
+          npm run build
+          npm run test:desktop
+          node scripts/multigroup-core.mjs
+          node scripts/multigroup-desktop.mjs
+          node scripts/administration-desktop.mjs
           node scripts/windows-service.mjs
           node scripts/windows-legacy-upgrade.mjs
           node scripts/windows-update-launcher.mjs
+          node scripts/group-read-core.mjs
+          node scripts/remote-core.mjs
+          node scripts/remote-desktop.mjs
+          npm run test:live
+          node ../scripts/messenger/relay-wire-contract.mjs
+          node scripts/lifecycle-core.mjs
+          node scripts/group-lifecycle.mjs
+          node scripts/group-departure.mjs
+          node scripts/group-members-core.mjs
+          node scripts/rekey-publication.mjs
+          node scripts/review-core.mjs
+          node scripts/file-queue-core.mjs
+          node scripts/folder-core.mjs
+          node scripts/folder-desktop.mjs
+          node scripts/compose-drafts-core.mjs
+          node scripts/compose-drafts-desktop.mjs
+          node scripts/conversation-window-desktop.mjs
+          node scripts/conversation-list-desktop.mjs
+          node scripts/conversation-read-desktop.mjs
+          node scripts/personal-collections-core.mjs
+          node scripts/personal-collections-desktop.mjs
+          node scripts/library-settings-desktop.mjs
+          node scripts/library-reference-core.mjs
+          node scripts/library-reference-desktop.mjs
+          node scripts/screen-lock-core.mjs
+          node scripts/screen-lock-desktop.mjs
+          node scripts/scheduled-core.mjs
+          node scripts/scheduled-desktop.mjs
+          node scripts/rich-text-core.mjs
+          node scripts/rich-text-desktop.mjs
+          node scripts/media-queue-desktop.mjs
+          node scripts/conversation-tools-desktop.mjs
+          node scripts/library-cleanup-core.mjs
+          node scripts/timetable-notices-core.mjs
+          node scripts/history-core.mjs
+          node scripts/history-desktop.mjs
+          node scripts/recall-core.mjs
+          node scripts/recall-desktop.mjs
+          node scripts/backup-core.mjs
+          node scripts/school-work-core.mjs
+          node scripts/notes-core.mjs
+          node scripts/self-recovery.mjs
+          node scripts/recovery-history.mjs
+          node scripts/backup-desktop.mjs
+          node scripts/capture-attachment-desktop.mjs
+          node scripts/school-work-desktop.mjs
+          node scripts/lifecycle-desktop.mjs
+          node scripts/windows-input.mjs
+          npm run test:live-desktop
+          npm audit --audit-level=moderate
       - name: Build separate teacher and administration installers
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
