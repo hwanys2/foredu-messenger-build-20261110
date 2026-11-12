@@ -29,7 +29,7 @@ jobs:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           repository: hwanys2/foreducator-frontend
-          ref: 41bdd246a856915cfb4a693be831e3cb738c3c80
+          ref: 2a40e665cfa95310f51b49f01fb67a7fc69239a8
           ssh-key: ${{ secrets.FOREDU_ADMIN022_SOURCE_READ_KEY }}
           persist-credentials: false
       - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
@@ -113,7 +113,10 @@ jobs:
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
           npm run build
+          node node_modules/playwright/cli.js install chromium
+          $env:FOREDU_CAPTURE_PRODUCT_VIDEO = '1'
           node scripts/remote-desktop.mjs
+          Remove-Item Env:FOREDU_CAPTURE_PRODUCT_VIDEO
       - name: Verify bundled fonts and conversation controls
         env:
           FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
