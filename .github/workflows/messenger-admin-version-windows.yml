@@ -1,119 +1,243 @@
-name: Diagnose existing administration installer
+name: School server version 0.2.2 installed verification
 on:
   workflow_dispatch:
     inputs:
+      native_source_run:
+        description: Completed Windows native run with identical Rust inputs (optional)
+        required: false
+        type: string
       verify_external_relay:
-        type: boolean
+        description: Verify installed apps against the deployed relay with synthetic accounts
+        required: false
         default: false
+        type: boolean
+concurrency:
+  group: messenger-windows-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
   actions: read
 jobs:
   windows:
     runs-on: windows-2025
-    timeout-minutes: 20
+    timeout-minutes: 90
     defaults:
       run:
         working-directory: messenger
         shell: pwsh
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           repository: hwanys2/foreducator-frontend
-          ref: 40a27c346bf37c2cdbae764978926fb2d1efafe0
+          ref: b50a23333e05c00d1e4ddf463145cc01dbbf0f84
           ssh-key: ${{ secrets.FOREDU_ADMIN022_SOURCE_READ_KEY }}
           persist-credentials: false
-      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903
+      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
         with:
           node-version: 26.5.0
           cache: npm
           cache-dependency-path: messenger/package-lock.json
-      - run: npm ci
-      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+      - name: Install pinned Rust toolchain
+        if: ${{ !inputs.native_source_run }}
+        run: rustup toolchain install 1.99.1 --profile minimal --component rustfmt --component clippy
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        if: ${{ !inputs.native_source_run }}
+        id: rust-cache
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            messenger/target
+          key: messenger-windows-rust-1.99.1-${{ hashFiles('messenger/Cargo.lock') }}
+          restore-keys: messenger-windows-rust-1.99.1-
+      - name: Install dependencies
+        run: npm ci
+      - name: Ensure Electron binary is available
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          node scripts/ensure-electron.mjs
+          node scripts/ensure-builder-tools.mjs
+      - name: Verify Rust formatting
+        if: ${{ !inputs.native_source_run }}
+        run: cargo fmt --all --check
+      - name: Check native core
+        if: ${{ !inputs.native_source_run }}
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: Test native core
+        if: ${{ !inputs.native_source_run }}
+        run: cargo test --workspace --locked
+      - name: Build native executables
+        if: ${{ !inputs.native_source_run }}
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          cargo build --release --workspace --locked
+          ./target/release/foredu-native-input.exe --probe
+      - name: Save native dependencies before desktop verification
+        if: ${{ !inputs.native_source_run && steps.rust-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            messenger/target
+          key: messenger-windows-rust-1.99.1-${{ hashFiles('messenger/Cargo.lock') }}
+      - name: Verify existing native build provenance
+        if: ${{ inputs.native_source_run }}
+        env:
+          NATIVE_SOURCE_RUN: ${{ inputs.native_source_run }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/verify-native-artifact.mjs
+      - name: Retrieve verified native artifact
+        if: ${{ inputs.native_source_run }}
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
         with:
           name: messenger-windows-prototype
-          path: messenger
+          path: messenger/imported-native
           github-token: ${{ github.token }}
-          run-id: 43170414606
-      - name: Diagnose the unchanged actual installer failure
+          run-id: ${{ inputs.native_source_run }}
+      - name: Prepare existing native executables
+        if: ${{ inputs.native_source_run }}
+        run: |
+          New-Item -ItemType Directory -Force target/release | Out-Null
+          foreach ($name in @('foredu-server.exe','foredu-native.exe','foredu-native-input.exe')) {
+            $files = @(Get-ChildItem imported-native -Filter $name -File -Recurse)
+            if ($files.Length -ne 1) { throw "A unique verified native executable is required." }
+            Copy-Item -LiteralPath $files[0].FullName -Destination (Join-Path target/release $name)
+          }
+      - name: Prepare app-local Windows runtime
+        run: ./scripts/windows-runtime.ps1
+      - name: Verify actual screen capture and window restoration
+        env:
+          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          npm run build
+          node scripts/remote-desktop.mjs
+      - name: Verify bundled fonts and conversation controls
+        env:
+          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
+        run: node scripts/conversation-tools-desktop.mjs
+      - name: Verify saved message removal
+        env:
+          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
+        run: node scripts/history-desktop.mjs
+      - name: Verify the school calendar
+        env:
+          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
+        run: node scripts/school-work-desktop.mjs
+      - name: Verify live desktop conversation widgets
+        env:
+          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
+        run: node scripts/live-desktop.mjs
+      - name: Build separate teacher and administration installers
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          npm run package:win -- --publish never
+          npm run package:win:admin -- --publish never
+          node scripts/build-update-fixtures.mjs
+      - name: Verify installer upgrades existing school services before login
         env:
           FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
           FOREDU_UPDATE_INSTALLER: ${{ github.workspace }}/messenger/release/ForeduMessenger-Administration-SchoolTest-0.2.2-x64.exe
+        run: node scripts/windows-server-reinstall.mjs
+      - name: Verify client and Electron windows
+        env:
+          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
+          npm test
+          node scripts/third-party-notices.mjs --check
+          node scripts/native-notices.mjs --check
+          node scripts/native-notices-core.mjs
+          node scripts/desk-core.mjs
+          node scripts/server-resume-core.mjs
+          node scripts/school-bells-core.mjs
+          node scripts/large-store-core.mjs
+          npm run build
+          npm run test:desktop
+          node scripts/multigroup-core.mjs
+          node scripts/multigroup-desktop.mjs
+          node scripts/administration-desktop.mjs
+          node scripts/windows-service.mjs
+          node scripts/windows-legacy-upgrade.mjs
+          node scripts/windows-update-launcher.mjs
+          node scripts/group-read-core.mjs
+          node scripts/remote-core.mjs
+          npm run test:live
+          node ../scripts/messenger/relay-wire-contract.mjs
+          node scripts/lifecycle-core.mjs
+          node scripts/group-lifecycle.mjs
+          node scripts/group-departure.mjs
+          node scripts/group-members-core.mjs
+          node scripts/rekey-publication.mjs
+          node scripts/review-core.mjs
+          node scripts/file-queue-core.mjs
+          node scripts/folder-core.mjs
+          node scripts/folder-desktop.mjs
+          node scripts/compose-drafts-core.mjs
+          node scripts/compose-drafts-desktop.mjs
+          node scripts/conversation-window-desktop.mjs
+          node scripts/conversation-list-desktop.mjs
+          node scripts/conversation-read-desktop.mjs
+          node scripts/personal-collections-core.mjs
+          node scripts/personal-collections-desktop.mjs
+          node scripts/library-settings-desktop.mjs
+          node scripts/library-reference-core.mjs
+          node scripts/library-reference-desktop.mjs
+          node scripts/screen-lock-core.mjs
+          node scripts/screen-lock-desktop.mjs
+          node scripts/scheduled-core.mjs
+          node scripts/scheduled-desktop.mjs
+          node scripts/rich-text-core.mjs
+          node scripts/rich-text-desktop.mjs
+          node scripts/media-queue-desktop.mjs
+          node scripts/library-cleanup-core.mjs
+          node scripts/timetable-notices-core.mjs
+          node scripts/history-core.mjs
+          node scripts/recall-core.mjs
+          node scripts/recall-desktop.mjs
+          node scripts/backup-core.mjs
+          node scripts/school-work-core.mjs
+          node scripts/notes-core.mjs
+          node scripts/self-recovery.mjs
+          node scripts/recovery-history.mjs
+          node scripts/backup-desktop.mjs
+          node scripts/capture-attachment-desktop.mjs
+          node scripts/lifecycle-desktop.mjs
+          node scripts/windows-input.mjs
+          npm audit --audit-level=moderate
+      - name: Verify initial exact installed production connection
+        continue-on-error: true
+        env:
+          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
+          FOREDU_MESSENGER_TEST_AUTH: ${{ secrets.FOREDU_ADMIN022_AUTH }}
+          FOREDU_LICENSE_AUTO: '0'
+        run: |
           @'
-          // Diagnostic run only. Never a release report or a substitute for the gate.
-          import fs from 'node:fs';
-          import fsp from 'node:fs/promises';
-          import path from 'node:path';
-          import os from 'node:os';
-          import { spawn } from 'node:child_process';
-          import { createRequire } from 'node:module';
-          const require = createRequire(import.meta.url);
-          const { powershell } = require(path.resolve('electron/server-install.cjs'));
-          await fsp.mkdir('test-results', { recursive: true });
-          const watchRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'foredu-installer-diagnosis-'));
-          const records = [];
-          const seen = new Set();
-          const timer = setInterval(() => {
-            try {
-              for (const entry of fs.readdirSync(watchRoot,{withFileTypes:true})) {
-                if (!entry.isDirectory() || !/^ns[a-z0-9]+\.tmp$/i.test(entry.name)) continue;
-                try {
-                  const value = JSON.parse(fs.readFileSync(path.join(watchRoot,entry.name,'foredu-server-update-result.json'),'utf8'));
-                  const safe = Object.fromEntries(['ok','stage','type','resultCode','rollbackOk','version'].map(k => [k,value[k]]));
-                  if (seen.has(JSON.stringify(safe))) continue;
-                  seen.add(JSON.stringify(safe)); records.push(safe);
-                  fs.writeFileSync('test-results/nsis-server-update-diagnostic.json',JSON.stringify({diagnosticOnly:true,records},null,2));
-                  console.log('Installer helper status:',JSON.stringify(safe));
-                } catch {}
-              }
-            } catch {}
-          },5);
-          const watcher = {close:() => clearInterval(timer)};
-          const test = 'scripts/windows-server-reinstall.mjs';
-          const original = await fsp.readFile(test, 'utf8');
-          const normalized = original.replace(/\r\n/g, '\n');
-          const marker = '} finally {\n  if (app) await app.close()';
-          if (!normalized.includes(marker)) throw Error('Expected diagnostic insertion point.');
-          const diagnostic = `} catch (originalError) {
-            console.log('Diagnostic only: installer failure was retained.');
-            const info = await powershell("$s=Get-CimInstance Win32_Service -Filter \\\"Name='ForeduSchoolMessenger'\\\"; @{serviceState=$s.State;servicePath=$s.PathName;diagnosticProcess64=[Environment]::Is64BitProcess;programFiles=[Environment]::GetFolderPath('ProgramFiles')}|ConvertTo-Json -Compress").catch(()=> '{}');
-            console.log('Service metadata:', info);
-            const binary = path.join(destination,'resources/native/foredu-server.exe');
-            console.log('Installed native file exists:', await fs.access(binary).then(()=>true,()=>false));
-            if (await fs.access(binary).then(()=>true,()=>false)) {
-              const result = path.resolve('test-results/direct-installer-diagnostic.json');
-              const hash = await fileHash(binary);
-              const quote = value => "'"+value.replace(/'/g,"''")+"'";
-              try {
-                await powershell('& '+quote(path.resolve('electron/windows-server-update.ps1'))+' -ServerExecutable '+quote(binary)+" -ExpectedHash '"+hash+"' -ExpectedVersion '"+current+"' -Diagnostic "+quote(result)+';exit $LASTEXITCODE','',180000);
-                console.log('Direct source updater succeeded on the same retained service.');
-              } catch { console.log('Direct source updater also failed.'); }
-              console.log('Direct updater status:', await fs.readFile(result,'utf8').catch(()=> 'missing'));
-            }
-            throw originalError;
-          `;
-          await fsp.writeFile(test, normalized.replace(marker, diagnostic + marker).replace('path.join(os.tmpdir(),', 'path.join(process.env.FOREDU_DIAG_DATA_ROOT,'));
-          try {
-            const code = await new Promise((resolve,reject) => {
-              const child = spawn(process.execPath,[test], {stdio:'inherit',env:{...process.env,TEMP:watchRoot,TMP:watchRoot,FOREDU_DIAG_DATA_ROOT:os.tmpdir(),FOREDU_SERVICE_UPGRADE_CASE:'0.1.5'}});
-              child.once('error',reject); child.once('exit',resolve);
-            });
-            console.log('Diagnostic retained installer exit:', code);
-            if (!records.length) console.log('No inner helper diagnostic was observed.');
-            // A failing installer remains a failure, even if a direct helper succeeded.
-            process.exitCode = Number(code) || 1;
-          } finally {
-            watcher.close();
-            await fsp.writeFile(test, original);
-            await fsp.rm(watchRoot,{recursive:true,force:true});
-          }
-          '@ | Set-Content -Encoding utf8 diagnostic-installer.mjs
-          node diagnostic-installer.mjs
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+          import{spawn}from'node:child_process';import path from'node:path';import fs from'node:fs/promises';import{fileHash}from'./scripts/release-evidence.mjs';const dest=path.join(process.env.RUNNER_TEMP,'ForeduSchoolInstalledVerification','teacher'),installer=path.resolve('release/ForeduMessenger-SchoolTest-0.2.2-x64.exe'),exe=path.join(dest,'ForeduSchoolMessengerTrial.exe');const run=(cmd,args,env=process.env)=>new Promise((ok,no)=>{const p=spawn(cmd,args,{env,stdio:'inherit'});p.once('error',no);p.once('exit',c=>c===0?ok():no(Error('Installed production preflight failed '+c)));});await run(installer,['/S','/D='+dest]);const env={...process.env,ELECTRON_EXECUTABLE:exe,FOREDU_INSTALLER_SHA256:await fileHash(installer)};await run(process.execPath,['scripts/external-production.mjs'],env);await fs.copyFile('test-results/external-installed.json','test-results/external-preflight.json');await run(process.execPath,['scripts/desk-linked-desktop.mjs'],env);await fs.copyFile('test-results/desk-linked-desktop.json','test-results/desk-linked-preflight.json');
+          '@ | node --input-type=module
+      - name: Verify installed application
+        env:
+          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
+          FOREDU_MESSENGER_TEST_AUTH: ${{ secrets.FOREDU_ADMIN022_AUTH }}
+          FOREDU_TEST_PRODUCTION_RELAY: ${{ (github.event_name == 'push' || inputs.verify_external_relay) && '1' || '' }}
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          node node_modules/playwright/cli.js install chromium
+          node scripts/verify-install.mjs
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
-          name: installer-diagnostic-only
-          path: messenger/test-results/*diagnostic*.json
+          name: messenger-windows-prototype
+          path: |
+            messenger/release/*.exe
+            messenger/target/release/foredu-server.exe
+            messenger/target/release/foredu-native.exe
+            messenger/target/release/foredu-native-input.exe
+            messenger/target/release/*.dll
+            messenger/test-results/
           retention-days: 2
