@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   windows:
-    runs-on: windows-2022
+    runs-on: windows-2025
     timeout-minutes: 55
     defaults:
       run:
@@ -29,6 +29,11 @@ jobs:
       - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903
         with:
           node-version: 26.5.0
+      - name: Inspect normal HTTPS API responses before the installed suite
+        run: |
+          @'
+          const url='https://www.foreducator.com/api/messenger/relay';for(const agent of [null,'']){const headers={'content-type':'application/json',...(agent===null?{}:{'user-agent':agent})};const r=await fetch(url,{method:'POST',headers,body:JSON.stringify({actor:'probe'}),signal:AbortSignal.timeout(15000)});const t=await r.text();const result={status:r.status,contentType:r.headers.get('content-type'),edge:r.headers.get('x-vercel-id'),mitigated:r.headers.get('x-vercel-mitigated'),jsonResponse:/^\s*[{[]/.test(t),securityCheckpoint:/security checkpoint|verifying your browser|cf-mitigated/i.test(t),emptyUserAgent:agent===''};console.log(JSON.stringify(result));if(!result.jsonResponse)throw Error('This runner does not receive the normal production API JSON response. Security settings are unchanged.');}console.log(JSON.stringify({proxyEnvironmentPresent:['HTTP_PROXY','HTTPS_PROXY','ALL_PROXY'].some(k=>!!process.env[k])}));
+          '@ | node --input-type=module
       - name: Install pinned test dependencies
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -50,6 +55,16 @@ jobs:
         run: |
           @'
           import fs from 'node:fs/promises';import{createReadStream}from'node:fs';import path from 'node:path';import crypto from 'node:crypto';import assert from 'node:assert/strict';import{sourceEvidence}from'./scripts/release-evidence.mjs';assert.deepEqual(sourceEvidence(),{sourceCommit:'aecb548e9a13cd4165856fd3000126111745fad1',sourceDirty:false});const base=path.join(process.env.RUNNER_TEMP,'foredu-frozen'),expected=JSON.parse(process.env.EXPECTED_FILES);for(const[file,hash]of Object.entries(expected)){const h=crypto.createHash('sha256');for await(const b of createReadStream(path.join(base,file)))h.update(b);assert.equal(h.digest('hex'),hash,file);}for(const folder of ['release','target/release','test-results'])await fs.cp(path.join(base,folder),folder,{recursive:true});for(const name of ['installed-verification','external-installed','desk-linked-desktop'])await fs.rm('test-results/'+name+'.json',{force:true});for(const name of ['native-notices-core','desk-core','school-bells-core','live-core','windows-server-reinstall']){const r=JSON.parse(await fs.readFile('test-results/'+name+'.json','utf8'));assert.equal(r.sourceCommit,'aecb548e9a13cd4165856fd3000126111745fad1',name);assert.equal(r.sourceDirty,false,name);assert.equal(r.platform,'win32',name);}await fs.writeFile('test-results/frozen-installer-inputs.json',JSON.stringify({ok:true,...sourceEvidence(),platform:process.platform,sourceBuildRun:'https://github.com/hwanys2/foredu-messenger-build-20261110/actions/runs/43131695203',currentRunId:process.env.GITHUB_RUN_ID,files:expected,buildAndCoreChecks:'previous actual Windows source build; unchanged exact installer/native bytes',installedVerification:'fresh Windows 2022 full installed-app suite follows'},null,2));
+          '@ | node --input-type=module
+      - name: Verify exact installed native production ingress before the remaining suite
+        env:
+          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
+          FOREDU_MESSENGER_TEST_AUTH: ${{ secrets.FOREDU_ADMIN021_AUTH }}
+          FOREDU_INSTALLER_SHA256: 2ce1ee16f46e30d1c523b9ba01b9163c1d74c89421fb9a3f019f28da542e8099
+          FOREDU_LICENSE_AUTO: '0'
+        run: |
+          @'
+          import{spawn}from'node:child_process';import path from'node:path';const dest=path.join(process.env.RUNNER_TEMP,'ForeduSchoolInstalledVerification','teacher'),installer=path.resolve('release/ForeduMessenger-SchoolTest-0.2.1-x64.exe'),exe=path.join(dest,'ForeduSchoolMessengerTrial.exe');const run=(cmd,args,env=process.env)=>new Promise((ok,no)=>{const p=spawn(cmd,args,{env,stdio:'inherit'});p.once('error',no);p.once('exit',c=>c===0?ok():no(Error('Installed ingress check failed '+c)));});await run(installer,['/S','/D='+dest]);const env={...process.env,ELECTRON_EXECUTABLE:exe};await run(process.execPath,['scripts/external-production.mjs'],env);await run(process.execPath,['scripts/desk-linked-desktop.mjs'],env);
           '@ | node --input-type=module
       - name: Prepare private higher-version update fixtures without rebuilding public candidates
         env:
