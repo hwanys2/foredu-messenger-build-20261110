@@ -29,7 +29,7 @@ jobs:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           repository: hwanys2/foreducator-frontend
-          ref: 8d298d1a10165197a461cbb967451c0ab547cca4
+          ref: 40a27c346bf37c2cdbae764978926fb2d1efafe0
           ssh-key: ${{ secrets.FOREDU_ADMIN022_SOURCE_READ_KEY }}
           persist-credentials: false
       - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
@@ -114,6 +114,22 @@ jobs:
           $PSNativeCommandUseErrorActionPreference = $true
           npm run build
           node scripts/remote-desktop.mjs
+      - name: Verify bundled fonts and conversation controls
+        env:
+          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
+        run: node scripts/conversation-tools-desktop.mjs
+      - name: Verify saved message removal
+        env:
+          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
+        run: node scripts/history-desktop.mjs
+      - name: Verify the school calendar
+        env:
+          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
+        run: node scripts/school-work-desktop.mjs
+      - name: Verify live desktop conversation widgets
+        env:
+          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
+        run: node scripts/live-desktop.mjs
       - name: Build separate teacher and administration installers
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
@@ -123,6 +139,11 @@ jobs:
           npm run package:win -- --publish never
           npm run package:win:admin -- --publish never
           node scripts/build-update-fixtures.mjs
+      - name: Verify installer upgrades existing school services before login
+        env:
+          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
+          FOREDU_UPDATE_INSTALLER: ${{ github.workspace }}/messenger/release/ForeduMessenger-Administration-SchoolTest-0.2.2-x64.exe
+        run: node scripts/windows-server-reinstall.mjs
       - name: Verify client and Electron windows
         env:
           FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
@@ -174,11 +195,9 @@ jobs:
           node scripts/rich-text-core.mjs
           node scripts/rich-text-desktop.mjs
           node scripts/media-queue-desktop.mjs
-          node scripts/conversation-tools-desktop.mjs
           node scripts/library-cleanup-core.mjs
           node scripts/timetable-notices-core.mjs
           node scripts/history-core.mjs
-          node scripts/history-desktop.mjs
           node scripts/recall-core.mjs
           node scripts/recall-desktop.mjs
           node scripts/backup-core.mjs
@@ -188,10 +207,8 @@ jobs:
           node scripts/recovery-history.mjs
           node scripts/backup-desktop.mjs
           node scripts/capture-attachment-desktop.mjs
-          node scripts/school-work-desktop.mjs
           node scripts/lifecycle-desktop.mjs
           node scripts/windows-input.mjs
-          npm run test:live-desktop
           npm audit --audit-level=moderate
       - name: Verify initial exact installed production connection
         continue-on-error: true
