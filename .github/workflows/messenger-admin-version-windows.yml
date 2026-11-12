@@ -29,7 +29,7 @@ jobs:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           repository: hwanys2/foreducator-frontend
-          ref: 297cba56b15da3ea1383d69726ad7b2120c6e8fb
+          ref: 8d298d1a10165197a461cbb967451c0ab547cca4
           ssh-key: ${{ secrets.FOREDU_ADMIN022_SOURCE_READ_KEY }}
           persist-credentials: false
       - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
@@ -107,6 +107,13 @@ jobs:
           }
       - name: Prepare app-local Windows runtime
         run: ./scripts/windows-runtime.ps1
+      - name: Verify actual screen capture and window restoration
+        env:
+          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          npm run build
+          node scripts/remote-desktop.mjs
       - name: Build separate teacher and administration installers
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
@@ -139,7 +146,6 @@ jobs:
           node scripts/windows-update-launcher.mjs
           node scripts/group-read-core.mjs
           node scripts/remote-core.mjs
-          node scripts/remote-desktop.mjs
           npm run test:live
           node ../scripts/messenger/relay-wire-contract.mjs
           node scripts/lifecycle-core.mjs
