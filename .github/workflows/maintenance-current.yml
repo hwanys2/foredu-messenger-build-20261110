@@ -1,0 +1,77 @@
+name: Verify current maintenance and conversation startup
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-2025
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: messenger
+    env:
+      FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
+      FOREDU_LICENSE_AUTO: '0'
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
+        with:
+          repository: hwanys2/foreducator-frontend
+          ref: ba233f8ff1d9388c0b9ade0d4f85c832f2427ab3
+          ssh-key: ${{ secrets.FOREDU_MAINT025_SOURCE_READ_KEY }}
+          persist-credentials: false
+      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903
+        with:
+          node-version: 26.5.0
+          cache: npm
+          cache-dependency-path: messenger/package-lock.json
+      - run: rustup toolchain install 1.99.1 --profile minimal --component rustfmt --component clippy
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            messenger/target
+          key: messenger-windows-rust-1.99.1-${{ hashFiles('messenger/Cargo.lock') }}
+          restore-keys: messenger-windows-rust-1.99.1-
+      - name: Build actual Windows programs
+        run: cargo build --release --workspace --locked
+      - name: Prepare renderer and runtime
+        id: setup
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          npm ci
+          node scripts/ensure-electron.mjs
+          node scripts/ensure-builder-tools.mjs
+          ./scripts/windows-runtime.ps1
+          npm run build
+          node node_modules/playwright/cli.js install chromium
+      - name: Verify reset and startup effects
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          node scripts/windows-updater-syntax.mjs
+          node scripts/server-reset-core.mjs
+          node scripts/server-maintenance-browser.mjs
+          node scripts/conversation-startup-browser.mjs
+          node scripts/first-login-core.mjs
+      - name: Verify real current-server restoration
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: node scripts/windows-server-restore.mjs
+      - name: Verify live calendar and configured tools
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        env:
+          FOREDU_MESSENGER_TEST_AUTH: ${{ secrets.FOREDU_MAINT025_AUTH }}
+        run: node scripts/desk-linked-desktop.mjs
+      - name: Verify private background and conversation login flash
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: node scripts/chat-background-desktop.mjs
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: maintenance-current
+          path: messenger/test-results/
+          retention-days: 2
