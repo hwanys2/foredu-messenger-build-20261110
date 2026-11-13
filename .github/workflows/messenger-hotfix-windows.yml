@@ -21,7 +21,7 @@ jobs:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
         with:
           repository: hwanys2/foreducator-frontend
-          ref: bf8c66563f0577ae80066c072cd622e7b10a06fb
+          ref: 0901b713d36dffa3c97611a1f1577564de80060f
           ssh-key: ${{ secrets.FOREDU_HOTFIX025_SOURCE_READ_KEY }}
           persist-credentials: false
           fetch-depth: 0
