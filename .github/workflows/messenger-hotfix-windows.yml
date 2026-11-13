@@ -29,7 +29,7 @@ jobs:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           repository: hwanys2/foreducator-frontend
-          ref: 5661ee0eba37aa99c633cb54fbfe26d606ef69de
+          ref: 8d6e7ecac575040e6d4f26b56e89d6a12b5c5016
           ssh-key: ${{ secrets.FOREDU_HOTFIX024_SOURCE_READ_KEY }}
           persist-credentials: false
       - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
@@ -60,15 +60,6 @@ jobs:
         run: |
           node scripts/ensure-electron.mjs
           node scripts/ensure-builder-tools.mjs
-      - name: Verify Rust formatting
-        if: ${{ !inputs.native_source_run }}
-        run: cargo fmt --all --check
-      - name: Check native core
-        if: ${{ !inputs.native_source_run }}
-        run: cargo clippy --workspace --all-targets --locked -- -D warnings
-      - name: Test native core
-        if: ${{ !inputs.native_source_run }}
-        run: cargo test --workspace --locked
       - name: Build native executables
         if: ${{ !inputs.native_source_run }}
         run: |
@@ -123,6 +114,15 @@ jobs:
         env:
           FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
         run: node scripts/account-switch-desktop.mjs
+      - name: Verify Rust formatting
+        if: ${{ !inputs.native_source_run }}
+        run: cargo fmt --all --check
+      - name: Check native core
+        if: ${{ !inputs.native_source_run }}
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: Test native core
+        if: ${{ !inputs.native_source_run }}
+        run: cargo test --workspace --locked
       - name: Verify collapsible multi-department directory
         env:
           FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
