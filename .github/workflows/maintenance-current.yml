@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
         with:
           repository: hwanys2/foreducator-frontend
-          ref: ba233f8ff1d9388c0b9ade0d4f85c832f2427ab3
+          ref: c1b7b2bab5a8a208f1d4bf6b7d69425dea57aa8e
           ssh-key: ${{ secrets.FOREDU_MAINT025_SOURCE_READ_KEY }}
           persist-credentials: false
       - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903
@@ -28,6 +28,7 @@ jobs:
           cache-dependency-path: messenger/package-lock.json
       - run: rustup toolchain install 1.99.1 --profile minimal --component rustfmt --component clippy
       - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: rust-cache
         with:
           path: |
             ~/.cargo/registry
@@ -37,6 +38,14 @@ jobs:
           restore-keys: messenger-windows-rust-1.99.1-
       - name: Build actual Windows programs
         run: cargo build --release --workspace --locked
+      - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        if: ${{ steps.rust-cache.outputs.cache-hit != 'true' }}
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            messenger/target
+          key: messenger-windows-rust-1.99.1-${{ hashFiles('messenger/Cargo.lock') }}
       - name: Prepare renderer and runtime
         id: setup
         env:
