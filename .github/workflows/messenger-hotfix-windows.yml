@@ -1,4 +1,4 @@
-name: Continue exact verified Windows installers
+name: Inspect exact installer icon resources
 on:
   workflow_dispatch:
 permissions:
@@ -57,99 +57,15 @@ jobs:
           npm ci
           node scripts/ensure-electron.mjs
           node scripts/ensure-builder-tools.mjs
-          npm run build
-          node node_modules/playwright/cli.js install chromium
-          New-Item -ItemType Directory -Force build/windows-runtime | Out-Null
-          Copy-Item target/release/*.dll build/windows-runtime/
-          Remove-Item Env:GITHUB_TOKEN
-          node scripts/build-update-fixtures.mjs
-      - name: Verify client and Electron windows
-        env:
-          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
+      - name: Diagnose unchanged installer icons without bypassing the assertion
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
-          npm test
-          node scripts/third-party-notices.mjs --check
-          node scripts/native-notices.mjs --check
-          node scripts/native-notices-core.mjs
-          node scripts/desk-core.mjs
-          node scripts/server-resume-core.mjs
-          node scripts/school-bells-core.mjs
-          node scripts/large-store-core.mjs
-          npm run build
-          node node_modules/playwright/cli.js install chromium
-          npm run test:desktop
-          node scripts/multigroup-core.mjs
-          node scripts/administration-desktop.mjs
-          node scripts/windows-legacy-upgrade.mjs
-          node scripts/windows-update-launcher.mjs
-          node scripts/group-read-core.mjs
-          node scripts/conversation-retry-core.mjs
-          node scripts/remote-core.mjs
-          npm run test:live
-          node ../scripts/messenger/relay-wire-contract.mjs
-          node scripts/lifecycle-core.mjs
-          node scripts/group-lifecycle.mjs
-          node scripts/group-departure.mjs
-          node scripts/group-members-core.mjs
-          node scripts/rekey-publication.mjs
-          node scripts/review-core.mjs
-          node scripts/file-queue-core.mjs
-          node scripts/folder-core.mjs
-          node scripts/folder-desktop.mjs
-          node scripts/compose-drafts-core.mjs
-          node scripts/compose-drafts-desktop.mjs
-          node scripts/conversation-window-desktop.mjs
-          node scripts/conversation-list-desktop.mjs
-          node scripts/conversation-read-desktop.mjs
-          node scripts/personal-collections-core.mjs
-          node scripts/personal-collections-desktop.mjs
-          node scripts/library-settings-desktop.mjs
-          node scripts/library-reference-core.mjs
-          node scripts/library-reference-desktop.mjs
-          node scripts/screen-lock-core.mjs
-          node scripts/screen-lock-desktop.mjs
-          node scripts/scheduled-desktop.mjs
-          node scripts/rich-text-core.mjs
-          node scripts/rich-text-desktop.mjs
-          node scripts/media-queue-desktop.mjs
-          node scripts/library-cleanup-core.mjs
-          node scripts/timetable-notices-core.mjs
-          node scripts/history-core.mjs
-          node scripts/recall-core.mjs
-          node scripts/recall-desktop.mjs
-          node scripts/school-work-core.mjs
-          node scripts/notes-core.mjs
-          node scripts/self-recovery.mjs
-          node scripts/recovery-history.mjs
-          node scripts/capture-attachment-desktop.mjs
-          node scripts/lifecycle-desktop.mjs
-          node scripts/windows-input.mjs
-          npm audit --audit-level=moderate
-      - name: Verify installed application
-        env:
-          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
-          FOREDU_MESSENGER_TEST_AUTH: ${{ secrets.FOREDU_HOTFIX025_AUTH }}
-          FOREDU_TEST_PRODUCTION_RELAY: 1
-        run: |
-          $PSNativeCommandUseErrorActionPreference = $true
-          node node_modules/playwright/cli.js install chromium
-          node scripts/verify-install.mjs
+          New-Item -ItemType Directory -Force test-results | Out-Null
+          [IO.File]::WriteAllBytes((Join-Path (Get-Location) 'test-results/icon-diagnostic.mjs'),[Convert]::FromBase64String('aW1wb3J0IGZzIGZyb20gJ25vZGU6ZnMvcHJvbWlzZXMnOwppbXBvcnQgb3MgZnJvbSAnbm9kZTpvcyc7CmltcG9ydCBwYXRoIGZyb20gJ25vZGU6cGF0aCc7CmltcG9ydCB7c3Bhd259IGZyb20gJ25vZGU6Y2hpbGRfcHJvY2Vzcyc7CmltcG9ydCB7ZmlsZUhhc2gsc291cmNlRXZpZGVuY2V9IGZyb20gJy4uL3NjcmlwdHMvcmVsZWFzZS1ldmlkZW5jZS5tanMnOwpjb25zdCBydW49KGV4ZSxhcmdzLGVudj1wcm9jZXNzLmVudik9Pm5ldyBQcm9taXNlKChyZXNvbHZlLHJlamVjdCk9Pntjb25zdCBjPXNwYXduKGV4ZSxhcmdzLHtlbnYsc3RkaW86J2luaGVyaXQnLHdpbmRvd3NIaWRlOmZhbHNlfSk7Yy5vbignZXJyb3InLHJlamVjdCk7Yy5vbignZXhpdCcsY29kZT0+cmVzb2x2ZShjb2RlKSk7fSk7CmNvbnN0IHJvbGVzPXt0ZWFjaGVyOlsnRm9yZWR1TWVzc2VuZ2VyLVNjaG9vbFRlc3QtMC4yLjUteDY0LmV4ZScsJ0ZvcmVkdVNjaG9vbE1lc3NlbmdlclRyaWFsLmV4ZSddLGFkbWluaXN0cmF0aW9uOlsnRm9yZWR1TWVzc2VuZ2VyLUFkbWluaXN0cmF0aW9uLVNjaG9vbFRlc3QtMC4yLjUteDY0LmV4ZScsJ0ZvcmVkdVNjaG9vbEFkbWluaXN0cmF0aW9uVHJpYWwuZXhlJ119OwpsZXQgb3JpZ2luYWw9YXdhaXQgZnMucmVhZEZpbGUoJ3NjcmlwdHMvd2luZG93cy1pZGVudGl0eS5tanMnLCd1dGY4Jyk7Cm9yaWdpbmFsPW9yaWdpbmFsLnJlcGxhY2UoJ2Zyb20gIi4vb3BlcmF0aW9uLWV2aWRlbmNlLm1qcyInLCdmcm9tICIuLi9zY3JpcHRzL29wZXJhdGlvbi1ldmlkZW5jZS5tanMiJyk7CmNvbnN0IGFuY2hvcj0nICAgICAgaWYgKG1hdGNoaW5nIC8gMTAyNCA8IDAuMDIpJzsKaWYoIW9yaWdpbmFsLmluY2x1ZGVzKGFuY2hvcikpdGhyb3cgRXJyb3IoJ0ljb24gZGlhZ25vc3RpYyBpbnN0cnVtZW50YXRpb24gcmVxdWlyZXMgdGhlIGV4YWN0IG9yaWdpbmFsIGFzc2VydGlvbi4nKTsKb3JpZ2luYWw9b3JpZ2luYWwucmVwbGFjZShhbmNob3IsYCAgICAgIGNvbnN0IHByZWZpeCA9IHBhdGguam9pbihwcm9jZXNzLmN3ZCgpLCAndGVzdC1yZXN1bHRzJywgJ2lkZW50aXR5LScgKyAocm9sZSA/ICdhZG1pbmlzdHJhdGlvbicgOiAndGVhY2hlcicpKTsKICAgICAgY29uc3QgZXhwZWN0ZWRJbWFnZSA9IG5hdGl2ZUltYWdlLmNyZWF0ZUZyb21QYXRoKHBhdGguam9pbihhcHAuZ2V0QXBwUGF0aCgpLCdidWlsZCcscm9sZSA/ICdhZG1pbmlzdHJhdGlvbi1pY29uLnBuZycgOiAnaWNvbi5wbmcnKSkucmVzaXplKHt3aWR0aDozMixoZWlnaHQ6MzJ9KTsKICAgICAgY29uc3QgZmlsZUltYWdlID0gYXdhaXQgYXBwLmdldEZpbGVJY29uKGV4ZSx7c2l6ZTonbGFyZ2UnfSk7CiAgICAgIGF3YWl0IGZzLndyaXRlRmlsZShwcmVmaXgrJy1leHBlY3RlZC5wbmcnLGV4cGVjdGVkSW1hZ2UudG9QTkcoKSk7CiAgICAgIGF3YWl0IGZzLndyaXRlRmlsZShwcmVmaXgrJy1hY3R1YWwucG5nJyxmaWxlSW1hZ2UudG9QTkcoKSk7CiAgICAgIGF3YWl0IGZzLndyaXRlRmlsZShwcmVmaXgrJy1kaWFnbm9zdGljLmpzb24nLEpTT04uc3RyaW5naWZ5KHtleGUsZXhwZWN0ZWRTaXplOmV4cGVjdGVkSW1hZ2UuZ2V0U2l6ZSgpLGFjdHVhbFNpemU6ZmlsZUltYWdlLmdldFNpemUoKSxleHBlY3RlZEJ5dGVzOmV4cGVjdGVkLmxlbmd0aCxhY3R1YWxCeXRlczphY3R1YWwubGVuZ3RoLGNvbG9yLG1hdGNoaW5nLGZyYWN0aW9uOm1hdGNoaW5nLzEwMjQsZXhwZWN0ZWRUb3A6Wy4uLmJpbnNdLnNvcnQoKGEsYik9PmJbMV0tYVsxXSkuc2xpY2UoMCw1KX0sbnVsbCwyKSk7CiR7YW5jaG9yfWApOwpjb25zdCBpbnN0cnVtZW50ZWQ9cGF0aC5yZXNvbHZlKCd0ZXN0LXJlc3VsdHMvd2luZG93cy1pZGVudGl0eS1pbnN0cnVtZW50ZWQubWpzJyk7YXdhaXQgZnMud3JpdGVGaWxlKGluc3RydW1lbnRlZCxvcmlnaW5hbCk7CmNvbnN0IHJlc3VsdHM9e307CmZvcihjb25zdFtyb2xlLFtpbnN0YWxsZXIsYmluYXJ5XV1vZiBPYmplY3QuZW50cmllcyhyb2xlcykpewogY29uc3QgZGVzdGluYXRpb249cGF0aC5qb2luKHByb2Nlc3MuZW52LlJVTk5FUl9URU1QfHxvcy50bXBkaXIoKSwnRm9yZWR1U2Nob29sSW5zdGFsbGVkVmVyaWZpY2F0aW9uJyxyb2xlKTsKIGNvbnN0IGNvZGU9YXdhaXQgcnVuKHBhdGgucmVzb2x2ZSgncmVsZWFzZScsaW5zdGFsbGVyKSxbJy9TJywnL0Q9JytkZXN0aW5hdGlvbl0pO2lmKGNvZGUpdGhyb3cgRXJyb3IoJ0V4YWN0IGluc3RhbGxlciBmYWlsZWQ6ICcrY29kZSk7CiByZXN1bHRzW3JvbGVdPXtpbnN0YWxsZXJTaGEyNTY6YXdhaXQgZmlsZUhhc2gocGF0aC5yZXNvbHZlKCdyZWxlYXNlJyxpbnN0YWxsZXIpKSxjb2RlOmF3YWl0IHJ1bihwcm9jZXNzLmV4ZWNQYXRoLFtpbnN0cnVtZW50ZWRdLHsuLi5wcm9jZXNzLmVudixFTEVDVFJPTl9FWEVDVVRBQkxFOnBhdGguam9pbihkZXN0aW5hdGlvbixiaW5hcnkpLEZPUkVEVV9JTlNUQUxMRVJfU0hBMjU2OmF3YWl0IGZpbGVIYXNoKHBhdGgucmVzb2x2ZSgncmVsZWFzZScsaW5zdGFsbGVyKSl9KX07Cn0KYXdhaXQgZnMud3JpdGVGaWxlKCd0ZXN0LXJlc3VsdHMvaWNvbi1kaWFnbm9zdGljLXN1bW1hcnkuanNvbicsSlNPTi5zdHJpbmdpZnkoey4uLnNvdXJjZUV2aWRlbmNlKCksb2s6T2JqZWN0LnZhbHVlcyhyZXN1bHRzKS5ldmVyeShyPT5yLmNvZGU9PT0wKSxwbGF0Zm9ybTpwcm9jZXNzLnBsYXRmb3JtLHJlc3VsdHN9LG51bGwsMikrJ1xuJyk7CmlmKE9iamVjdC52YWx1ZXMocmVzdWx0cykuc29tZShyPT5yLmNvZGUhPT0wKSlwcm9jZXNzLmV4aXRDb2RlPTE7Cg=='))
+          node test-results/icon-diagnostic.mjs
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        if: success()
+        if: always()
         with:
-          name: messenger-windows-prototype
-          path: |
-            messenger/release/*.exe
-            messenger/target/release/foredu-server.exe
-            messenger/target/release/foredu-native.exe
-            messenger/target/release/foredu-native-input.exe
-            messenger/target/release/*.dll
-            messenger/test-results/
-          retention-days: 2
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        if: failure()
-        with:
-          name: messenger-windows-continuation-reports
+          name: messenger-icon-diagnostic
           path: messenger/test-results/
           retention-days: 2
