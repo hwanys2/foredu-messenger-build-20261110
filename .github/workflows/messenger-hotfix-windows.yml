@@ -29,7 +29,7 @@ jobs:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           repository: hwanys2/foreducator-frontend
-          ref: 777064bcbb7f4a40cdab9e2f873e53f10d846e80
+          ref: 2e75d3008714010bc471b79ee0907b27c274f3cb
           ssh-key: ${{ secrets.FOREDU_HOTFIX024_SOURCE_READ_KEY }}
           persist-credentials: false
       - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
@@ -158,6 +158,18 @@ jobs:
         env:
           FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
         run: node scripts/windows-service.mjs
+      - name: Verify group invitation and isolated queue recovery
+        env:
+          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
+        run: node scripts/group-invite-core.mjs
+      - name: Verify chat wallpaper and quick invitation UI
+        env:
+          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
+        run: node scripts/chat-background-browser.mjs
+      - name: Verify private wallpaper in native windows
+        env:
+          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
+        run: node scripts/chat-background-desktop.mjs
       - name: Verify first login and offline group messaging
         env:
           FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
