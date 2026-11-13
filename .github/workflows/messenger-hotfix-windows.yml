@@ -29,7 +29,7 @@ jobs:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           repository: hwanys2/foreducator-frontend
-          ref: ead1c3d77a6cdea260070e191b495934b69fd50f
+          ref: 8c0a85c129f3c1039e6a0eb8de7c1f503b01e8e3
           ssh-key: ${{ secrets.FOREDU_HOTFIX025_SOURCE_READ_KEY }}
           persist-credentials: false
       - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
@@ -39,6 +39,8 @@ jobs:
           cache-dependency-path: messenger/package-lock.json
       - name: Verify Windows updater syntax
         run: node scripts/windows-updater-syntax.mjs
+      - name: Verify native distribution notices before compilation
+        run: node scripts/native-notices.mjs --check
       - name: Install pinned Rust toolchain
         if: ${{ !inputs.native_source_run }}
         run: rustup toolchain install 1.99.1 --profile minimal --component rustfmt --component clippy
