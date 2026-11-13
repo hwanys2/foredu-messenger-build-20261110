@@ -59,6 +59,9 @@ jobs:
           node scripts/ensure-builder-tools.mjs
           npm run build
           node node_modules/playwright/cli.js install chromium
+          New-Item -ItemType Directory -Force build/windows-runtime | Out-Null
+          Copy-Item target/release/*.dll build/windows-runtime/
+          Remove-Item Env:GITHUB_TOKEN
           node scripts/build-update-fixtures.mjs
       - name: Verify client and Electron windows
         env:
@@ -133,7 +136,7 @@ jobs:
           node node_modules/playwright/cli.js install chromium
           node scripts/verify-install.mjs
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        if: always()
+        if: success()
         with:
           name: messenger-windows-prototype
           path: |
@@ -143,4 +146,10 @@ jobs:
             messenger/target/release/foredu-native-input.exe
             messenger/target/release/*.dll
             messenger/test-results/
+          retention-days: 2
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: failure()
+        with:
+          name: messenger-windows-continuation-reports
+          path: messenger/test-results/
           retention-days: 2
