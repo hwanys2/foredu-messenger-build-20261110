@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
         with:
           repository: hwanys2/foreducator-frontend
-          ref: c1b7b2bab5a8a208f1d4bf6b7d69425dea57aa8e
+          ref: e976bc15fd1a071ac7c0599e2ece628ddfc44b09
           ssh-key: ${{ secrets.FOREDU_MAINT025_SOURCE_READ_KEY }}
           persist-credentials: false
       - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903
