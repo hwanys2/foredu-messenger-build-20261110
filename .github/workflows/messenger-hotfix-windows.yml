@@ -29,7 +29,7 @@ jobs:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           repository: hwanys2/foreducator-frontend
-          ref: a6478f5dfdaf7d4964daf671e013e9ba545adb47
+          ref: ec6ce3ed2275db68756a91657b4c9789f5d04080
           ssh-key: ${{ secrets.FOREDU_HOTFIX024_SOURCE_READ_KEY }}
           persist-credentials: false
       - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
@@ -119,6 +119,26 @@ jobs:
           $env:FOREDU_CAPTURE_PRODUCT_VIDEO = '1'
           node scripts/remote-desktop.mjs
           Remove-Item Env:FOREDU_CAPTURE_PRODUCT_VIDEO
+      - name: Verify widget login and account isolation
+        env:
+          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
+        run: node scripts/account-switch-desktop.mjs
+      - name: Verify collapsible multi-department directory
+        env:
+          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
+        run: node scripts/multigroup-desktop.mjs
+      - name: Verify shared and personal calendars
+        env:
+          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
+        run: node scripts/calendar-privacy-browser.mjs
+      - name: Verify Windows pinned app identity
+        env:
+          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
+        run: node scripts/windows-identity.mjs
+      - name: Verify timetable force approval and conversation layout
+        env:
+          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
+        run: node scripts/usability-browser.mjs
       - name: Verify stop-denied school service recovery
         env:
           FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
@@ -214,10 +234,8 @@ jobs:
           node scripts/large-store-core.mjs
           npm run build
           node node_modules/playwright/cli.js install chromium
-          node scripts/usability-browser.mjs
           npm run test:desktop
           node scripts/multigroup-core.mjs
-          node scripts/multigroup-desktop.mjs
           node scripts/administration-desktop.mjs
           node scripts/windows-legacy-upgrade.mjs
           node scripts/windows-update-launcher.mjs
