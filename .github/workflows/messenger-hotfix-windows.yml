@@ -1,254 +1,65 @@
-name: School server version 0.2.5 installed verification
+name: Continue exact verified Windows installers
 on:
   workflow_dispatch:
-    inputs:
-      native_source_run:
-        description: Completed Windows native run with identical Rust inputs (optional)
-        required: false
-        type: string
-      verify_external_relay:
-        description: Verify installed apps against the deployed relay with synthetic accounts
-        required: false
-        default: false
-        type: boolean
-concurrency:
-  group: messenger-windows-${{ github.ref }}
-  cancel-in-progress: true
 permissions:
   contents: read
   actions: read
 jobs:
   windows:
     runs-on: windows-2025
-    timeout-minutes: 90
+    timeout-minutes: 65
     defaults:
       run:
-        working-directory: messenger
         shell: pwsh
+        working-directory: messenger
+    env:
+      FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
+      FOREDU_DISTRIBUTION_SOURCE: feb62515b64c113c33f7576a72831baf662b7a89
+      FOREDU_LICENSE_AUTO: '0'
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
         with:
           repository: hwanys2/foreducator-frontend
-          ref: feb62515b64c113c33f7576a72831baf662b7a89
+          ref: 201c1418d78f924bead1a63a5834622e3c81ca29
           ssh-key: ${{ secrets.FOREDU_HOTFIX025_SOURCE_READ_KEY }}
           persist-credentials: false
-      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+          fetch-depth: 2
+      - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903
         with:
           node-version: 26.5.0
           cache: npm
           cache-dependency-path: messenger/package-lock.json
-      - name: Verify Windows updater syntax
-        run: node scripts/windows-updater-syntax.mjs
-      - name: Verify native distribution notices before compilation
-        run: node scripts/native-notices.mjs --check
-      - name: Install pinned Rust toolchain
-        if: ${{ !inputs.native_source_run }}
-        run: rustup toolchain install 1.99.1 --profile minimal --component rustfmt --component clippy
-      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
-        if: ${{ !inputs.native_source_run }}
-        id: rust-cache
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            messenger/target
-          key: messenger-windows-rust-1.99.1-${{ hashFiles('messenger/Cargo.lock') }}
-          restore-keys: messenger-windows-rust-1.99.1-
-      - name: Install dependencies
-        run: npm ci
-      - name: Ensure Electron binary is available
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          node scripts/ensure-electron.mjs
-          node scripts/ensure-builder-tools.mjs
-      - name: Build native executables
-        if: ${{ !inputs.native_source_run }}
-        run: |
-          $PSNativeCommandUseErrorActionPreference = $true
-          cargo build --release --workspace --locked
-          ./target/release/foredu-native-input.exe --probe
-      - name: Save native dependencies before desktop verification
-        if: ${{ !inputs.native_source_run && steps.rust-cache.outputs.cache-hit != 'true' }}
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            messenger/target
-          key: messenger-windows-rust-1.99.1-${{ hashFiles('messenger/Cargo.lock') }}
-      - name: Verify existing native build provenance
-        if: ${{ inputs.native_source_run }}
-        env:
-          NATIVE_SOURCE_RUN: ${{ inputs.native_source_run }}
-          GITHUB_TOKEN: ${{ github.token }}
-        run: node scripts/verify-native-artifact.mjs
-      - name: Retrieve verified native artifact
-        if: ${{ inputs.native_source_run }}
-        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
         with:
           name: messenger-windows-prototype
-          path: messenger/imported-native
+          path: ${{ runner.temp }}/retained-candidate
           github-token: ${{ github.token }}
-          run-id: ${{ inputs.native_source_run }}
-      - name: Prepare existing native executables
-        if: ${{ inputs.native_source_run }}
-        run: |
-          New-Item -ItemType Directory -Force target/release | Out-Null
-          foreach ($name in @('foredu-server.exe','foredu-native.exe','foredu-native-input.exe')) {
-            $files = @(Get-ChildItem imported-native -Filter $name -File -Recurse)
-            if ($files.Length -ne 1) { throw "A unique verified native executable is required." }
-            Copy-Item -LiteralPath $files[0].FullName -Destination (Join-Path target/release $name)
-          }
-      - name: Prepare app-local Windows runtime
-        run: ./scripts/windows-runtime.ps1
-      - name: Build separate teacher and administration installers
+          run-id: 43395261996
+      - name: Verify unchanged application inputs and authentic retained binaries
         env:
-          CSC_IDENTITY_AUTO_DISCOVERY: "false"
-          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
+          GITHUB_TOKEN: ${{ github.token }}
+          RETAINED_SOURCE_RUN: '43395261996'
+          RETAINED_ARTIFACT_ID: '14025075579'
+          RETAINED_ARTIFACT_DIGEST: 'sha256:7578e444139d1c9c382fcc07ad71dc176d87e4942d8862582b89982c898dd8ea'
+          RETAINED_EXPECTED_HASHES: '{"release/ForeduMessenger-SchoolTest-0.2.5-x64.exe":"3d9103898ef2f8753a12a66f90ba162f4a4ca232235067665b2c222ede34935d","release/ForeduMessenger-Administration-SchoolTest-0.2.5-x64.exe":"4fd6b69a6d97412cd1c085e776210a271a904cb428fe8c3ed0f7461c0f84d17b","target/release/foredu-server.exe":"a4788a86aeadb3be561ff7346ed9cbc75991852ed718acc60f491ef1c84d8763","target/release/foredu-native.exe":"6d8065084f649258c02d8b96ab857acb70e822a4ccd7febf70e6caccca0e6c1d","target/release/foredu-native-input.exe":"0412d314aac6bc99fea44266c6934358308faf9b211cd3089fe5a70d90488049","target/release/vcruntime140.dll":"d1f4225df2cd877dbf130d5668a021dce3f94118455ff5ec952061c30afc9ce7","target/release/vccorlib140.dll":"09f93d5ff96ae09767f3e1af3cdd43a5a58f2598654fc63089429bb6f9f4737f","target/release/concrt140.dll":"54716f0738af891f283d213b5c8d11b25896bb8ee3097d301eae718560cf974e","target/release/msvcp140_atomic_wait.dll":"3d0cbfaa1bf3eecf5a3f4491d2960ee803cb994f30292c6adc4a07c498f60e2b","target/release/msvcp140_1.dll":"206c931bf90fdad8816de3b5e2ef80b2bcaa9406c89ecc05fe6fddffe251e982","target/release/msvcp140_2.dll":"d50d7883f20d1dc6191768d3746f52dd9cac89c346ffaed5be1f110c2f34a838","target/release/msvcp140_codecvt_ids.dll":"8a65c7596ef2e6938731f5a1058e7e40145b6d97967cc649231a076b9a608d78","target/release/vcruntime140_1.dll":"a7146c08f89fe5b04541ab507cdb59ff7b44534d4ba3c668a426c6450a03434e","target/release/vcruntime140_threads.dll":"40f39e8cee5f5a531b4010e18b807e8fe265b908dc58f959ecb7ebc6ea6cb11a","target/release/msvcp140.dll":"7c26614e1d733892c2deac7e245ce115504b1d80592dd0a01b08e3e5a55f89ca"}'
+          RETAINED_ARTIFACT_DIR: ${{ runner.temp }}/retained-candidate
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
-          npm run package:win -- --publish never
-          npm run package:win:admin -- --publish never
+          $proof=Join-Path $env:RUNNER_TEMP 'verify-retained-candidate.mjs'
+          [IO.File]::WriteAllBytes($proof,[Convert]::FromBase64String('aW1wb3J0IGFzc2VydCBmcm9tICdub2RlOmFzc2VydC9zdHJpY3QnOwppbXBvcnQgZnMgZnJvbSAnbm9kZTpmcy9wcm9taXNlcyc7CmltcG9ydCBwYXRoIGZyb20gJ25vZGU6cGF0aCc7CmltcG9ydCBjcnlwdG8gZnJvbSAnbm9kZTpjcnlwdG8nOwppbXBvcnQgeyBwYXRoVG9GaWxlVVJMIH0gZnJvbSAnbm9kZTp1cmwnOwpjb25zdCB7c291cmNlRXZpZGVuY2V9ID0gYXdhaXQgaW1wb3J0KHBhdGhUb0ZpbGVVUkwocGF0aC5yZXNvbHZlKCdzY3JpcHRzL3JlbGVhc2UtZXZpZGVuY2UubWpzJykpKTsKY29uc3QgZXZpZGVuY2U9c291cmNlRXZpZGVuY2UoKTsKYXNzZXJ0KGV2aWRlbmNlLmRpc3RyaWJ1dGlvbklucHV0c0lkZW50aWNhbCAmJiAhZXZpZGVuY2Uuc291cmNlRGlydHkpOwpjb25zdCByZXBvPSdod2FueXMyL2ZvcmVkdS1tZXNzZW5nZXItYnVpbGQtMjAyNjExMTAnLHJ1bklkPXByb2Nlc3MuZW52LlJFVEFJTkVEX1NPVVJDRV9SVU47CmFzc2VydC5tYXRjaChydW5JZHx8JycsL15cZCskLyk7CmNvbnN0IGV4cGVjdGVkPUpTT04ucGFyc2UocHJvY2Vzcy5lbnYuUkVUQUlORURfRVhQRUNURURfSEFTSEVTKSxyb290PXByb2Nlc3MuZW52LlJFVEFJTkVEX0FSVElGQUNUX0RJUjsKY29uc3QgaGVhZGVycz17QXV0aG9yaXphdGlvbjonQmVhcmVyICcrcHJvY2Vzcy5lbnYuR0lUSFVCX1RPS0VOLEFjY2VwdDonYXBwbGljYXRpb24vdm5kLmdpdGh1Yitqc29uJ307CmFzeW5jIGZ1bmN0aW9uIGFwaShyb3V0ZSl7Y29uc3Qgcj1hd2FpdCBmZXRjaCgnaHR0cHM6Ly9hcGkuZ2l0aHViLmNvbS9yZXBvcy8nK3JlcG8rcm91dGUse2hlYWRlcnN9KTthc3NlcnQoci5vaywnUmV0YWluZWQgcHJvdmVuYW5jZSBsb29rdXAgZmFpbGVkICcrci5zdGF0dXMpO3JldHVybiByLmpzb24oKX0KY29uc3QgcnVuPWF3YWl0IGFwaSgnL2FjdGlvbnMvcnVucy8nK3J1bklkKTsKYXNzZXJ0LmVxdWFsKHJ1bi5zdGF0dXMsJ2NvbXBsZXRlZCcpOwphc3NlcnQuZXF1YWwocnVuLnBhdGgsJy5naXRodWIvd29ya2Zsb3dzL21lc3Nlbmdlci1ob3RmaXgtd2luZG93cy55bWwnKTsKYXNzZXJ0LmVxdWFsKHJ1bi5oZWFkX3JlcG9zaXRvcnkuZnVsbF9uYW1lLHJlcG8pOwpjb25zdCBvcmlnaW5hbFdvcmtmbG93PWF3YWl0IGFwaSgnL2NvbnRlbnRzLy5naXRodWIvd29ya2Zsb3dzL21lc3Nlbmdlci1ob3RmaXgtd2luZG93cy55bWw/cmVmPScrcnVuLmhlYWRfc2hhKTsKY29uc3QgcmVjaXBlPUJ1ZmZlci5mcm9tKG9yaWdpbmFsV29ya2Zsb3cuY29udGVudCwnYmFzZTY0JykudG9TdHJpbmcoJ3V0ZjgnKTsKYXNzZXJ0KHJlY2lwZS5pbmNsdWRlcygncmVwb3NpdG9yeTogaHdhbnlzMi9mb3JlZHVjYXRvci1mcm9udGVuZFxuICAgICAgICAgIHJlZjogJytldmlkZW5jZS5zb3VyY2VDb21taXQrJ1xuJykpOwpjb25zdCB7am9ic309YXdhaXQgYXBpKCcvYWN0aW9ucy9ydW5zLycrcnVuSWQrJy9qb2JzJyk7CmNvbnN0IHJlcXVpcmVkPVsnVmVyaWZ5IFdpbmRvd3MgdXBkYXRlciBzeW50YXgnLCdWZXJpZnkgbmF0aXZlIGRpc3RyaWJ1dGlvbiBub3RpY2VzIGJlZm9yZSBjb21waWxhdGlvbicsJ0J1aWxkIG5hdGl2ZSBleGVjdXRhYmxlcycsJ1ZlcmlmeSBSdXN0IGZvcm1hdHRpbmcnLCdDaGVjayBuYXRpdmUgY29yZScsJ1Rlc3QgbmF0aXZlIGNvcmUnLCdCdWlsZCBzZXBhcmF0ZSB0ZWFjaGVyIGFuZCBhZG1pbmlzdHJhdGlvbiBpbnN0YWxsZXJzJywnVmVyaWZ5IGluc3RhbGxlciB1cGdyYWRlcyBleGlzdGluZyBzY2hvb2wgc2VydmljZXMgYmVmb3JlIGxvZ2luJywnVmVyaWZ5IGluaXRpYWwgZXhhY3QgaW5zdGFsbGVkIHByb2R1Y3Rpb24gY29ubmVjdGlvbicsJ1ZlcmlmeSBhY3R1YWwgb3V0c2lkZSBwaG90byBiZWZvcmUgcGFja2FnaW5nJywnVmVyaWZ5IHNoYXJlZCBhbmQgcGVyc29uYWwgY2FsZW5kYXJzJywnVmVyaWZ5IGFjdHVhbCBzY3JlZW4gY2FwdHVyZSBhbmQgd2luZG93IHJlc3RvcmF0aW9uJywnVmVyaWZ5IGNvbnZlcnNhdGlvbiBzdGFydHVwIHdpdGhvdXQgbG9naW4gZmxhc2gnLCdWZXJpZnkgc2NvcGVkIHNjaG9vbCBkYXRhIHJlc2V0cycsJ1ZlcmlmeSBtYWludGVuYW5jZSBjb25maXJtYXRpb24gaW50ZXJmYWNlcycsJ1ZlcmlmeSBjdXJyZW50LXNlcnZlciByZXN0b3JhdGlvbiBhbmQgcm9sbGJhY2snLCdWZXJpZnkgd2lkZ2V0IGxvZ2luIGFuZCBhY2NvdW50IGlzb2xhdGlvbicsJ1ZlcmlmeSBiYWNrdXAgYW5kIHJlc3RvcmF0aW9uIGRlc2t0b3Agd29ya2Zsb3cnLCdWZXJpZnkgY29sbGFwc2libGUgbXVsdGktZGVwYXJ0bWVudCBkaXJlY3RvcnknLCdWZXJpZnkgV2luZG93cyBwaW5uZWQgYXBwIGlkZW50aXR5JywnVmVyaWZ5IHRpbWV0YWJsZSBmb3JjZSBhcHByb3ZhbCBhbmQgY29udmVyc2F0aW9uIGxheW91dCcsJ1ZlcmlmeSBzdG9wLWRlbmllZCBzY2hvb2wgc2VydmljZSByZWNvdmVyeScsJ1ZlcmlmeSBncm91cCBpbnZpdGF0aW9uIGFuZCBpc29sYXRlZCBxdWV1ZSByZWNvdmVyeScsJ1ZlcmlmeSBjaGF0IHdhbGxwYXBlciBhbmQgcXVpY2sgaW52aXRhdGlvbiBVSScsJ1ZlcmlmeSBwcml2YXRlIHdhbGxwYXBlciBpbiBuYXRpdmUgd2luZG93cycsJ1ZlcmlmeSBmaXJzdCBsb2dpbiBhbmQgb2ZmbGluZSBncm91cCBtZXNzYWdpbmcnLCdWZXJpZnkgZXhpc3RpbmcgYXR0YWNobWVudCByZWFkIHN0YXRlIGR1cmluZyB1cGdyYWRlJywnVmVyaWZ5IHNjaGVkdWxlZCBhdHRhY2htZW50IHJlYWQgc3RhdHVzJywnVmVyaWZ5IGJ1bmRsZWQgZm9udHMgYW5kIGNvbnZlcnNhdGlvbiBjb250cm9scycsJ1ZlcmlmeSBzYXZlZCBtZXNzYWdlIHJlbW92YWwnLCdWZXJpZnkgdGhlIHNjaG9vbCBjYWxlbmRhcicsJ1ZlcmlmeSBsaXZlIGRlc2t0b3AgY29udmVyc2F0aW9uIHdpZGdldHMnLCdWZXJpZnkgaW5zdGFsbGVyIGhvc3QgZW52aXJvbm1lbnQgaXNvbGF0aW9uJywnVmVyaWZ5IGVuY3J5cHRlZCBiYWNrdXAgcmVzdG9yYXRpb24nXTsKY29uc3Qgc3RlcHM9am9icy5mbGF0TWFwKGo9Pmouc3RlcHN8fFtdKTsKZm9yKGNvbnN0IG5hbWUgb2YgcmVxdWlyZWQpYXNzZXJ0KHN0ZXBzLnNvbWUocz0+cy5uYW1lPT09bmFtZSYmcy5jb25jbHVzaW9uPT09J3N1Y2Nlc3MnKSwnT3JpZ2luYWwgZ2F0ZSB3YXMgbm90IHBhc3NlZDogJytuYW1lKTsKY29uc3QgYXJ0aWZhY3RzPShhd2FpdCBhcGkoJy9hY3Rpb25zL3J1bnMvJytydW5JZCsnL2FydGlmYWN0cycpKS5hcnRpZmFjdHMuZmlsdGVyKGE9PmEubmFtZT09PSdtZXNzZW5nZXItd2luZG93cy1wcm90b3R5cGUnJiYhYS5leHBpcmVkKTsKYXNzZXJ0LmVxdWFsKGFydGlmYWN0cy5sZW5ndGgsMSk7CmFzc2VydC5lcXVhbChhcnRpZmFjdHNbMF0uaWQsTnVtYmVyKHByb2Nlc3MuZW52LlJFVEFJTkVEX0FSVElGQUNUX0lEKSk7CmFzc2VydC5lcXVhbChhcnRpZmFjdHNbMF0uZGlnZXN0LHByb2Nlc3MuZW52LlJFVEFJTkVEX0FSVElGQUNUX0RJR0VTVCk7CmFzc2VydC5tYXRjaChhcnRpZmFjdHNbMF0uZGlnZXN0LC9ec2hhMjU2OlthLWYwLTldezY0fSQvKTsKY29uc3QgaGFzaD1hc3luYyBmaWxlPT57Y29uc3QgaD1jcnlwdG8uY3JlYXRlSGFzaCgnc2hhMjU2Jyk7Zm9yIGF3YWl0KGNvbnN0IGIgb2YgKGF3YWl0IGltcG9ydCgnbm9kZTpmcycpKS5jcmVhdGVSZWFkU3RyZWFtKGZpbGUpKWgudXBkYXRlKGIpO3JldHVybiBoLmRpZ2VzdCgnaGV4Jyl9Owpmb3IoY29uc3QgW3JlbGF0aXZlLGRpZ2VzdF0gb2YgT2JqZWN0LmVudHJpZXMoZXhwZWN0ZWQpKWFzc2VydC5lcXVhbChhd2FpdCBoYXNoKHBhdGguam9pbihyb290LHJlbGF0aXZlKSksZGlnZXN0LCdSZXRhaW5lZCBmaWxlIGNoYW5nZWQ6ICcrcmVsYXRpdmUpOwpjb25zdCByZWFkPWFzeW5jIG5hbWU9PkpTT04ucGFyc2UoYXdhaXQgZnMucmVhZEZpbGUocGF0aC5qb2luKHJvb3QsJ3Rlc3QtcmVzdWx0cycsbmFtZSksJ3V0ZjgnKSk7CmNvbnN0IHRlYWNoZXI9YXdhaXQgcmVhZCgnZXh0ZXJuYWwtcHJlZmxpZ2h0Lmpzb24nKSxhZG1pbmlzdHJhdGlvbj1hd2FpdCByZWFkKCd3aW5kb3dzLXNlcnZlci1yZWluc3RhbGwuanNvbicpOwpmb3IoY29uc3QgcmVwb3J0IG9mIFt0ZWFjaGVyLGFkbWluaXN0cmF0aW9uXSl7YXNzZXJ0LmVxdWFsKHJlcG9ydC5zb3VyY2VDb21taXQsZXZpZGVuY2Uuc291cmNlQ29tbWl0KTthc3NlcnQuZXF1YWwocmVwb3J0LnNvdXJjZURpcnR5LGZhbHNlKX0KYXNzZXJ0KHRlYWNoZXIuYXBwbGljYXRpb24ucGFja2FnZWQmJnRlYWNoZXIucHJvZHVjdGlvbik7CmFzc2VydC5lcXVhbCh0ZWFjaGVyLmluc3RhbGxlclNoYTI1NixleHBlY3RlZFsncmVsZWFzZS9Gb3JlZHVNZXNzZW5nZXItU2Nob29sVGVzdC0wLjIuNS14NjQuZXhlJ10pOwphc3NlcnQuZXF1YWwoYWRtaW5pc3RyYXRpb24uaW5zdGFsbGVyU2hhMjU2LGV4cGVjdGVkWydyZWxlYXNlL0ZvcmVkdU1lc3Nlbmdlci1BZG1pbmlzdHJhdGlvbi1TY2hvb2xUZXN0LTAuMi41LXg2NC5leGUnXSk7CmFzc2VydC5lcXVhbChhZG1pbmlzdHJhdGlvbi5jYXNlcy5sZW5ndGgsMyk7CmFzc2VydChhZG1pbmlzdHJhdGlvbi5jYXNlcy5ldmVyeShjPT5jLm9rJiZjLmxhdGVzdFVwZGF0ZURpc2FibGVkJiZjLmZpbGVQcmVzZXJ2ZWQmJmMuYWNjb3VudFByZXNlcnZlZCYmYy5iZWZvcmVMb2dpblZlcmlmaWVkKSk7CmF3YWl0IGZzLm1rZGlyKCdyZWxlYXNlJyx7cmVjdXJzaXZlOnRydWV9KTthd2FpdCBmcy5ta2RpcigndGFyZ2V0L3JlbGVhc2UnLHtyZWN1cnNpdmU6dHJ1ZX0pOwpmb3IoY29uc3QgcmVsYXRpdmUgb2YgT2JqZWN0LmtleXMoZXhwZWN0ZWQpKXtjb25zdCB0YXJnZXQ9cGF0aC5yZXNvbHZlKHJlbGF0aXZlKTthd2FpdCBmcy5ta2RpcihwYXRoLmRpcm5hbWUodGFyZ2V0KSx7cmVjdXJzaXZlOnRydWV9KTthd2FpdCBmcy5jb3B5RmlsZShwYXRoLmpvaW4ocm9vdCxyZWxhdGl2ZSksdGFyZ2V0KX0KYXdhaXQgZnMuY3AocGF0aC5qb2luKHJvb3QsJ3Rlc3QtcmVzdWx0cycpLCd0ZXN0LXJlc3VsdHMnLHtyZWN1cnNpdmU6dHJ1ZX0pOwphd2FpdCBmcy53cml0ZUZpbGUoJ3Rlc3QtcmVzdWx0cy9kaXN0cmlidXRpb24taW5wdXQtZXF1aXZhbGVuY2UuanNvbicsSlNPTi5zdHJpbmdpZnkoey4uLmV2aWRlbmNlLG9rOnRydWUsb3JpZ2luYWxSdW46e2lkOk51bWJlcihydW5JZCksdXJsOnJ1bi5odG1sX3VybCxjb25jbHVzaW9uOnJ1bi5jb25jbHVzaW9uLHJlYXNvbjonT25seSB0aGUgbGF0ZXIgYWRtaW5pc3RyYXRvciBmaXh0dXJlIHVzZWQgdGhlIHdyb25nIHByb2ZpbGUgZGlyZWN0b3J5OyBwYXNzZWQgY2hlY2tzIHJldGFpbmVkLid9LGFydGlmYWN0OntpZDphcnRpZmFjdHNbMF0uaWQsZGlnZXN0OmFydGlmYWN0c1swXS5kaWdlc3R9LHBhc3NlZE9yaWdpbmFsQ2hlY2tzOnJlcXVpcmVkLHJldGFpbmVkRmlsZUhhc2hlczpleHBlY3RlZH0sbnVsbCwyKSsnXG4nKTsKY29uc29sZS5sb2coSlNPTi5zdHJpbmdpZnkoe29rOnRydWUsYnVpbGRTb3VyY2U6ZXZpZGVuY2Uuc291cmNlQ29tbWl0LHZlcmlmaWNhdGlvblNvdXJjZTpldmlkZW5jZS52ZXJpZmljYXRpb25Tb3VyY2VDb21taXQsdW5jaGFuZ2VkRGlzdHJpYnV0aW9uRmlsZXM6T2JqZWN0LmtleXMoZXhwZWN0ZWQpLmxlbmd0aCxwYXNzZWRPcmlnaW5hbENoZWNrczpyZXF1aXJlZC5sZW5ndGh9KSk7Cg=='))
+          node $proof
+      - name: Prepare renderer and private future update fixtures
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          npm ci
+          node scripts/ensure-electron.mjs
+          node scripts/ensure-builder-tools.mjs
+          npm run build
+          node node_modules/playwright/cli.js install chromium
           node scripts/build-update-fixtures.mjs
-      - name: Verify installer upgrades existing school services before login
-        env:
-          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
-          FOREDU_UPDATE_INSTALLER: ${{ github.workspace }}/messenger/release/ForeduMessenger-Administration-SchoolTest-0.2.5-x64.exe
-        run: node scripts/windows-server-reinstall.mjs
-      - name: Verify initial exact installed production connection
-        env:
-          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
-          FOREDU_MESSENGER_TEST_AUTH: ${{ secrets.FOREDU_HOTFIX025_AUTH }}
-          FOREDU_LICENSE_AUTO: '0'
-        run: |
-          $PSNativeCommandUseErrorActionPreference = $true
-          node node_modules/playwright/cli.js install chromium
-          @'
-          import{spawn}from'node:child_process';import path from'node:path';import fs from'node:fs/promises';import{fileHash}from'./scripts/release-evidence.mjs';const dest=path.join(process.env.RUNNER_TEMP,'ForeduSchoolInstalledVerification','teacher'),installer=path.resolve('release/ForeduMessenger-SchoolTest-0.2.5-x64.exe'),exe=path.join(dest,'ForeduSchoolMessengerTrial.exe');const run=(cmd,args,env=process.env)=>new Promise((ok,no)=>{const p=spawn(cmd,args,{env,stdio:'inherit'});p.once('error',no);p.once('exit',c=>c===0?ok():no(Error('Installed production preflight failed '+c)));});await run(installer,['/S','/D='+dest]);const env={...process.env,ELECTRON_EXECUTABLE:exe,FOREDU_INSTALLER_SHA256:await fileHash(installer)};await run(process.execPath,['scripts/external-production.mjs'],env);await fs.copyFile('test-results/external-installed.json','test-results/external-preflight.json');await run(process.execPath,['scripts/desk-linked-desktop.mjs'],env);await fs.copyFile('test-results/desk-linked-desktop.json','test-results/desk-linked-preflight.json');
-          '@ | node --input-type=module
-      - name: Verify actual outside photo before packaging
-        env:
-          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
-          FOREDU_MESSENGER_TEST_AUTH: ${{ secrets.FOREDU_HOTFIX025_AUTH }}
-          FOREDU_EXTERNAL_SOURCE_ONLY: '1'
-          FOREDU_EXTERNAL_TRACE: '1'
-        run: |
-          $PSNativeCommandUseErrorActionPreference = $true
-          npm run build
-          $env:ELECTRON_EXECUTABLE = node -p "require('electron')"
-          node scripts/external-production.mjs
-      - name: Verify actual screen capture and window restoration
-        env:
-          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
-        run: |
-          $PSNativeCommandUseErrorActionPreference = $true
-          npm run build
-          node node_modules/playwright/cli.js install chromium
-          $env:FOREDU_CAPTURE_PRODUCT_VIDEO = '1'
-          node scripts/remote-desktop.mjs
-          Remove-Item Env:FOREDU_CAPTURE_PRODUCT_VIDEO
-      - name: Verify conversation startup without login flash
-        env:
-          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
-        run: node scripts/conversation-startup-browser.mjs
-      - name: Verify scoped school data resets
-        env:
-          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
-        run: node scripts/server-reset-core.mjs
-      - name: Verify maintenance confirmation interfaces
-        env:
-          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
-        run: node scripts/server-maintenance-browser.mjs
-      - name: Verify current-server restoration and rollback
-        env:
-          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
-        run: node scripts/windows-server-restore.mjs
-      - name: Verify widget login and account isolation
-        env:
-          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
-        run: node scripts/account-switch-desktop.mjs
-      - name: Verify backup and restoration desktop workflow
-        env:
-          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
-        run: node scripts/backup-desktop.mjs
-      - name: Verify Rust formatting
-        if: ${{ !inputs.native_source_run }}
-        run: cargo fmt --all --check
-      - name: Check native core
-        if: ${{ !inputs.native_source_run }}
-        run: cargo clippy --workspace --all-targets --locked -- -D warnings
-      - name: Test native core
-        if: ${{ !inputs.native_source_run }}
-        run: cargo test --workspace --locked
-      - name: Verify collapsible multi-department directory
-        env:
-          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
-        run: node scripts/multigroup-desktop.mjs
-      - name: Verify shared and personal calendars
-        env:
-          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
-        run: node scripts/calendar-privacy-browser.mjs
-      - name: Verify Windows pinned app identity
-        env:
-          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
-        run: node scripts/windows-identity.mjs
-      - name: Verify timetable force approval and conversation layout
-        env:
-          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
-        run: node scripts/usability-browser.mjs
-      - name: Verify stop-denied school service recovery
-        env:
-          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
-        run: node scripts/windows-service.mjs
-      - name: Verify group invitation and isolated queue recovery
-        env:
-          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
-        run: node scripts/group-invite-core.mjs
-      - name: Verify chat wallpaper and quick invitation UI
-        env:
-          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
-        run: node scripts/chat-background-browser.mjs
-      - name: Verify private wallpaper in native windows
-        env:
-          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
-        run: node scripts/chat-background-desktop.mjs
-      - name: Verify first login and offline group messaging
-        env:
-          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
-        run: node scripts/first-login-core.mjs
-      - name: Verify existing attachment read state during upgrade
-        env:
-          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
-        run: node scripts/attachment-read-migration.mjs
-      - name: Verify scheduled attachment read status
-        env:
-          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
-        run: node scripts/scheduled-core.mjs
-      - name: Verify bundled fonts and conversation controls
-        env:
-          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
-        run: node scripts/conversation-tools-desktop.mjs
-      - name: Verify saved message removal
-        env:
-          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
-        run: node scripts/history-desktop.mjs
-      - name: Verify the school calendar
-        env:
-          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
-        run: node scripts/school-work-desktop.mjs
-      - name: Verify live desktop conversation widgets
-        env:
-          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
-        run: node scripts/live-desktop.mjs
-      - name: Verify installer host environment isolation
-        env:
-          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
-        run: node scripts/windows-installer-wrapper.mjs
-      - name: Verify encrypted backup restoration
-        env:
-          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
-        run: node scripts/backup-core.mjs
       - name: Verify client and Electron windows
         env:
           FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
@@ -316,12 +127,12 @@ jobs:
         env:
           FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
           FOREDU_MESSENGER_TEST_AUTH: ${{ secrets.FOREDU_HOTFIX025_AUTH }}
-          FOREDU_TEST_PRODUCTION_RELAY: ${{ (github.event_name == 'push' || inputs.verify_external_relay) && '1' || '' }}
+          FOREDU_TEST_PRODUCTION_RELAY: 1
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
           node node_modules/playwright/cli.js install chromium
           node scripts/verify-install.mjs
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
           name: messenger-windows-prototype
