@@ -29,7 +29,7 @@ jobs:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           repository: hwanys2/foreducator-frontend
-          ref: 8d6e7ecac575040e6d4f26b56e89d6a12b5c5016
+          ref: 4862fad221ff0d9f803faff33be7c57770b5694f
           ssh-key: ${{ secrets.FOREDU_HOTFIX024_SOURCE_READ_KEY }}
           persist-credentials: false
       - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
@@ -114,6 +114,10 @@ jobs:
         env:
           FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
         run: node scripts/account-switch-desktop.mjs
+      - name: Verify backup and restoration desktop workflow
+        env:
+          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
+        run: node scripts/backup-desktop.mjs
       - name: Verify Rust formatting
         if: ${{ !inputs.native_source_run }}
         run: cargo fmt --all --check
@@ -123,6 +127,17 @@ jobs:
       - name: Test native core
         if: ${{ !inputs.native_source_run }}
         run: cargo test --workspace --locked
+      - name: Verify actual outside photo before packaging
+        env:
+          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
+          FOREDU_MESSENGER_TEST_AUTH: ${{ secrets.FOREDU_HOTFIX024_AUTH }}
+          FOREDU_EXTERNAL_SOURCE_ONLY: '1'
+          FOREDU_EXTERNAL_TRACE: '1'
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          npm run build
+          $env:ELECTRON_EXECUTABLE = node -p "require('electron')"
+          node scripts/external-production.mjs
       - name: Verify collapsible multi-department directory
         env:
           FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
@@ -179,21 +194,6 @@ jobs:
         env:
           FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
         run: node scripts/backup-core.mjs
-      - name: Verify backup and restoration desktop workflow
-        env:
-          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
-        run: node scripts/backup-desktop.mjs
-      - name: Verify actual outside photo before packaging
-        env:
-          FOREDU_NATIVE_BIN_DIR: ${{ github.workspace }}/messenger/target/release
-          FOREDU_MESSENGER_TEST_AUTH: ${{ secrets.FOREDU_HOTFIX024_AUTH }}
-          FOREDU_EXTERNAL_SOURCE_ONLY: '1'
-          FOREDU_EXTERNAL_TRACE: '1'
-        run: |
-          $PSNativeCommandUseErrorActionPreference = $true
-          npm run build
-          $env:ELECTRON_EXECUTABLE = node -p "require('electron')"
-          node scripts/external-production.mjs
       - name: Build separate teacher and administration installers
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
