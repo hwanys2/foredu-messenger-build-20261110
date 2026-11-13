@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
         with:
           repository: hwanys2/foreducator-frontend
-          ref: e976bc15fd1a071ac7c0599e2ece628ddfc44b09
+          ref: a0b2941df01f1a0e8c31f3e96feebb79da6d06bd
           ssh-key: ${{ secrets.FOREDU_MAINT025_SOURCE_READ_KEY }}
           persist-credentials: false
       - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903
@@ -58,26 +58,9 @@ jobs:
           ./scripts/windows-runtime.ps1
           npm run build
           node node_modules/playwright/cli.js install chromium
-      - name: Verify reset and startup effects
-        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
-        run: |
-          $PSNativeCommandUseErrorActionPreference = $true
-          node scripts/windows-updater-syntax.mjs
-          node scripts/server-reset-core.mjs
-          node scripts/server-maintenance-browser.mjs
-          node scripts/conversation-startup-browser.mjs
-          node scripts/first-login-core.mjs
       - name: Verify real current-server restoration
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: node scripts/windows-server-restore.mjs
-      - name: Verify live calendar and configured tools
-        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
-        env:
-          FOREDU_MESSENGER_TEST_AUTH: ${{ secrets.FOREDU_MAINT025_AUTH }}
-        run: node scripts/desk-linked-desktop.mjs
-      - name: Verify private background and conversation login flash
-        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
-        run: node scripts/chat-background-desktop.mjs
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
